@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { appDay, addMonths } from '../src/lib/dates';
-import { alerts, billStatus, capital, collectMessage, dayStatus, nextInstallment, parseAmount, quincenaStatus, spentOn, streak } from '../src/lib/engine';
-import type { AppState, Bill, Debt, Expense } from '../src/lib/types';
+import { alerts, allocateSaving, antojosLeft, billStatus, capital, collectMessage, dailyBars, dayStatus, favorites, goalPerQuincena, guessCategory, nextInstallment, parseAmount, quincenaStatus, quincenaSummaries, spentOn, streak, unassignedSaving } from '../src/lib/engine';
+import type { AppState, Bill, Debt, Expense, Goal } from '../src/lib/types';
+import { buildWidgetFrame } from '../src/lib/widget';
 
 /** La Paz es UTC−4: las 20:00 de La Paz son las 00:00Z del día siguiente. */
 const lp = (date: string, hhmm: string) => {
@@ -27,6 +28,7 @@ function base(): AppState {
     debts: [],
     bills: [],
     shots: [],
+    goals: [],
   };
 }
 const exp = (date: string, amount: number, extra: Partial<Expense> = {}): Expense => ({ id: `${date}-${amount}-${Math.random()}`, date, time: '12:00', desc: 'x', amount, accountId: 'monedas', ...extra });
@@ -143,5 +145,82 @@ describe('montos escritos a mano', () => {
     expect(parseAmount('Bs 25')).toBe(25);
     expect(parseAmount('')).toBeNull();
     expect(parseAmount('0')).toBeNull();
+  });
+});
+
+describe('categorías, favoritos y antojos', () => {
+  it('adivina la categoría por lo que escribes', () => {
+    expect(guessCategory('Almuerzo')).toBe('comida');
+    expect(guessCategory('Pan con quinua')).toBe('comida');
+    expect(guessCategory('Pasaje')).toBe('pasaje');
+    expect(guessCategory('Chicle')).toBe('antojos');
+    expect(guessCategory('Agüita')).toBe('antojos');
+    expect(guessCategory('Fotocopias anatomía')).toBe('universidad');
+    expect(guessCategory('Algo raro')).toBe('otros');
+  });
+  it('favoritos: lo que repites con el mismo monto', () => {
+    const s = base();
+    s.expenses.push(exp('2026-11-21', 25, { desc: 'Almuerzo' }), exp('2026-11-22', 25, { desc: 'almuerzo' }), exp('2026-11-22', 3, { desc: 'Pasaje' }), exp('2026-11-23', 3, { desc: 'Pasaje' }), exp('2026-11-23', 8, { desc: 'Agua' }));
+    const f = favorites(s, '2026-11-23');
+    expect(f.map((x) => `${x.desc} ${x.amount}`)).toEqual(['Pasaje 3', 'almuerzo 25']);
+  });
+  it('antojos: el límite menos lo gastado y lo que todavía falta para comer', () => {
+    const s = base();
+    s.incomes.push({ id: 'q', date: '2026-11-20', time: '10:00', desc: 'Quincena', amount: 600, accountId: 'bnb', quincena: { saving: 60 } });
+    // Sueles gastar 40 en comida por día.
+    s.expenses.push(exp('2026-11-21', 25, { desc: 'Almuerzo' }), exp('2026-11-21', 15, { desc: 'Cena' }), exp('2026-11-22', 40, { desc: 'Almuerzo' }));
+    s.expenses.push(exp('2026-11-23', 25, { desc: 'Almuerzo' }), exp('2026-11-23', 3, { desc: 'Pasaje' }));
+    // Límite 36 − gastado 28 − falta comer 15 → 0 (no alcanza para antojos).
+    expect(antojosLeft(s, '2026-11-23')).toEqual({ left: 0, reserve: 15 });
+    const r = antojosLeft({ ...s, expenses: s.expenses.filter((e) => e.date !== '2026-11-23') }, '2026-11-23');
+    expect(r).toEqual({ left: 0, reserve: 40 });
+  });
+});
+
+describe('metas de ahorro', () => {
+  const g = (id: string, target: number, saved: number, extra: Partial<Goal> = {}): Goal => ({ id, name: id, target, saved, ...extra });
+  it('cuánto apartar por quincena para llegar a tiempo', () => {
+    expect(goalPerQuincena(g('a', 300, 60, { deadline: '2026-12-23' }), '2026-11-23', 15)).toEqual({ per: 120, quincenas: 2 });
+    expect(goalPerQuincena(g('a', 300, 300, { deadline: '2026-12-23' }), '2026-11-23', 15)).toBeNull();
+    expect(goalPerQuincena(g('a', 300, 0), '2026-11-23', 15)).toBeNull();
+  });
+  it('reparte el ahorro: primero las metas con fecha, lo que sobra a la principal', () => {
+    const goals = [g('fondo', 500, 0, { main: true }), g('pago', 90, 0, { deadline: '2026-12-08' })];
+    expect(allocateSaving(goals, 60, '2026-11-23', 15)).toEqual({ pago: 60 });
+    expect(allocateSaving(goals, 100, '2026-11-23', 15)).toEqual({ pago: 90, fondo: 10 });
+    expect(allocateSaving([g('x', 20, 15, { main: true })], 60, '2026-11-23', 15)).toEqual({ x: 5 });
+  });
+  it('lo apartado sale de tu ahorro; el resto queda sin asignar', () => {
+    const s = base();
+    s.accounts = s.accounts.map((a) => (a.id === 'ahorro' ? { ...a, balance: 100 } : a));
+    s.goals = [g('a', 500, 70)];
+    expect(unassignedSaving(s)).toBe(30);
+  });
+});
+
+describe('resumen de la quincena', () => {
+  it('cuánto gastaste, en qué y cuántos días quedaste dentro', () => {
+    const s = base();
+    s.incomes.push({ id: 'q', date: '2026-11-21', time: '10:00', desc: 'Quincena', amount: 600, accountId: 'bnb', quincena: { saving: 60 } });
+    s.expenses.push(exp('2026-11-21', 25, { desc: 'Almuerzo' }), exp('2026-11-22', 40, { desc: 'Almuerzo' }), exp('2026-11-22', 6, { desc: 'Chicle' }));
+    const [r] = quincenaSummaries(s, '2026-11-23', lp('2026-11-23', '12:00'));
+    expect(r).toMatchObject({ spent: 71, budget: 540, saving: 60, daysWithin: 2, days: 3, done: false });
+    expect(r!.byCategory.antojos).toBe(6);
+    expect(dailyBars(s, '2026-11-23', 3).map((d) => d.spent)).toEqual([25, 46, 0]);
+  });
+});
+
+describe('widget', () => {
+  it('en modo discreto no manda montos ni el nombre de tu meta', () => {
+    const s = base();
+    s.incomes.push({ id: 'q', date: '2026-11-20', time: '10:00', desc: 'Quincena', amount: 600, accountId: 'bnb', quincena: { saving: 60 } });
+    s.goals = [{ id: 'g', name: 'Meta privada', target: 200, saved: 50, main: true }];
+    s.expenses.push(exp('2026-11-23', 10));
+    const open = buildWidgetFrame(s, lp('2026-11-23', '20:00'));
+    expect(open.goal).toEqual({ pct: 25, name: 'Meta privada', saved: 50, target: 200 });
+    expect(open.antojos).toBe(26);
+    const hidden = buildWidgetFrame({ ...s, settings: { ...s.settings, discreet: true } }, lp('2026-11-23', '20:00'));
+    expect(hidden).toMatchObject({ spent: null, limit: null, available: null, antojos: null, goal: { pct: 25, name: null, saved: null, target: null } });
+    expect(JSON.stringify(hidden)).not.toContain('Meta privada');
   });
 });

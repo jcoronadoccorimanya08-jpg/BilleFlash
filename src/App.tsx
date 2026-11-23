@@ -3,11 +3,12 @@ import { ConfettiHost } from './components/Confetti';
 import { BottomNav, ToastHost, type Tab } from './components/ui';
 import { UpdateBanner, useServiceWorker } from './components/UpdateBanner';
 import { WidgetHint } from './components/WidgetHint';
+import { canShareFiles, downloadBackupText, serializeBackup, shareBackupText } from './lib/backup';
 import { alerts, billStatus, nextInstallment } from './lib/engine';
 import { toast } from './lib/feedback';
 import { useMediaQuery, useToday } from './lib/hooks';
 import { applyLook, readLook, type Look } from './lib/look';
-import { getState, lock, onSaveError, useStore } from './lib/store';
+import { actions, currentBackup, getState, lock, onSaveError, useStore } from './lib/store';
 import { buildWidgetPayload, sendWidget } from './lib/widget';
 import { AccountsScreen } from './screens/Accounts';
 import { BillsScreen } from './screens/Bills';
@@ -100,6 +101,21 @@ export function App() {
       </>
     );
 
+  const quickBackup = async () => {
+    try {
+      const rec = await currentBackup();
+      if (!rec) return;
+      const text = serializeBackup(rec);
+      if (canShareFiles()) {
+        if ((await shareBackupText(text)) === 'cancelled') return;
+      } else downloadBackupText(text);
+      actions.markBackup();
+      toast('Respaldo listo. Guárdalo en Drive o mándatelo por WhatsApp.', 'success');
+    } catch {
+      toast('No se pudo crear el respaldo. Prueba desde Avance → Respaldo.', 'error');
+    }
+  };
+
   const navAlerts = {
     hoy: alerts(state, today).some((a) => a.tone === 'red'),
     deudas: state.debts.some((d) => (nextInstallment(d, today)?.inDays ?? 99) <= 0),
@@ -111,7 +127,7 @@ export function App() {
       <div className="app">
         {updateBanner}
         <WidgetHint />
-        {tab === 'hoy' && <TodayScreen state={state} today={today} now={now} />}
+        {tab === 'hoy' && <TodayScreen state={state} today={today} now={now} onBackup={() => void quickBackup()} />}
         {tab === 'cuentas' && <AccountsScreen state={state} today={today} />}
         {tab === 'deudas' && <DebtsScreen state={state} today={today} />}
         {tab === 'pagos' && <BillsScreen state={state} today={today} />}

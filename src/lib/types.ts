@@ -32,6 +32,24 @@ export interface Expense {
   accountId: string;
   /** Lo marcaste como olvidado (o lo agregaste después de cerrar el día): resta 15 %. */
   forgot?: boolean;
+  /** Categoría elegida a mano (si no, se adivina por la descripción). */
+  category?: Category;
+}
+
+/** En qué se te va la plata. */
+export type Category = 'comida' | 'pasaje' | 'antojos' | 'universidad' | 'salud' | 'casa' | 'otros';
+
+/** Una meta de ahorro: lo que llevas apartado para ella sale de tu ahorro. */
+export interface Goal {
+  id: string;
+  name: string;
+  target: number;
+  /** Lo que ya apartaste (Bs). */
+  saved: number;
+  /** Para cuándo (opcional). */
+  deadline?: ISODate;
+  /** La principal (la que sale en el widget). */
+  main?: boolean;
 }
 
 /** Plata que entró (un cobro, un regalo, una quincena…). */
@@ -43,7 +61,7 @@ export interface Income {
   amount: number;
   accountId: string;
   /** Si es una quincena: cuánto se fue al ahorro. */
-  quincena?: { saving: number };
+  quincena?: { saving: number; /** Cuánto de ese ahorro fue a cada meta. */ goals?: Record<string, number> };
 }
 
 /** Pasaste plata de una cuenta a otra (sacar del banco, cambiar soles…). */
@@ -151,4 +169,5 @@ export interface AppState {
   debts: Debt[];
   bills: Bill[];
   shots: CapitalShot[];
+  goals: Goal[];
 }

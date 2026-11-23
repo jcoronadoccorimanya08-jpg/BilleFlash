@@ -4,15 +4,15 @@ import { AccountSelect, AmountField, Money } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { ConfirmDialog, ScreenHeader, Sheet } from '../components/ui';
 import { CLOSE_PHRASES } from '../lib/config';
-import { clockOf, formatLong, type ISODate } from '../lib/dates';
-import { accountOf, alerts, canClose, dayStatus, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
+import { clockOf, diffDays, formatLong, localDateOf, type ISODate } from '../lib/dates';
+import { accountOf, alerts, antojosLeft, canClose, CATEGORIES, categoryInfo, categoryOf, dayStatus, favorites, guessCategory, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
 import { haptic, toast } from '../lib/feedback';
 import { actions } from '../lib/store';
-import type { AppState, Expense } from '../lib/types';
+import type { AppState, Category, Expense } from '../lib/types';
 
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]!;
 
-export function TodayScreen({ state, today, now }: { state: AppState; today: ISODate; now: Date }) {
+export function TodayScreen({ state, today, now, onBackup }: { state: AppState; today: ISODate; now: Date; onBackup: () => void }) {
   const s = state.settings;
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState('');
@@ -32,6 +32,17 @@ export function TodayScreen({ state, today, now }: { state: AppState; today: ISO
   const run = streak(state, now);
   const urgent = alerts(state, today);
   const n = parseAmount(amount);
+  const favs = favorites(state, today);
+  const anto = antojosLeft(state, today);
+  const lastBackup = s.lastBackupAt ? localDateOf(s.lastBackupAt) : null;
+  // Recordatorio de respaldo: cada 7 días (o si nunca hiciste uno y ya llevas 2 días usando la app).
+  const needBackup = lastBackup ? diffDays(lastBackup, today) >= 7 : diffDays(s.startDate, today) >= 2;
+
+  const quick = (f: { desc: string; amount: number; accountId: string }) => {
+    actions.addExpense(today, { desc: f.desc, amount: f.amount, accountId: f.accountId });
+    haptic();
+    toast(`${f.desc} ${money(f.amount, accountOf(state, f.accountId)?.currency)} anotado${closed ? ' (olvidado: −15 %)' : ''}.`, 'success');
+  };
 
   const add = () => {
     if (!n || !acc) return;
@@ -72,6 +83,16 @@ export function TodayScreen({ state, today, now }: { state: AppState; today: ISO
         </div>
       )}
 
+      {needBackup && (
+        <div className="bf-alert bf-backup" role="note">
+          <Icon name="shield" size={16} />
+          <span>{lastBackup ? `Tu último respaldo fue hace ${diffDays(lastBackup, today)} días.` : 'Todavía no hiciste ningún respaldo.'} Si pierdes el teléfono, pierdes tus datos.</span>
+          <button type="button" className="btn sm" onClick={onBackup}>
+            Respaldar
+          </button>
+        </div>
+      )}
+
       <section className="card bf-limit">
         <div className="bf-limit-top">
           <div>
@@ -88,12 +109,22 @@ export function TodayScreen({ state, today, now }: { state: AppState; today: ISO
         </div>
         <p className="fine">
           {within ? `Te quedan ${money(Math.max(0, q.limit - spent))} hoy.` : `Te pasaste ${money(spent - q.limit)}. Sin culpa: mañana lo equilibras.`}
+          {within && q.limit > 0 && <b className="bf-anto"> Para antojos: {money(anto.left)}{anto.reserve > 0 ? ` (guardando ${money(anto.reserve)} para comer)` : ''}.</b>}
           {q.q ? ` Disponible en la quincena: ${money(q.available)}${q.nextIn !== null ? ` · próxima ${q.nextIn > 0 ? `en ${q.nextIn} ${q.nextIn === 1 ? 'día' : 'días'}` : q.nextIn === 0 ? 'hoy' : `atrasada ${-q.nextIn} ${q.nextIn === -1 ? 'día' : 'días'}`}` : ''}.` : ' Registra tu quincena con «Entró plata».'}
         </p>
       </section>
 
       <section className="card">
         <h2 className="card-title">Anotar un gasto</h2>
+        {favs.length > 0 && (
+          <div className="bf-favs" role="group" aria-label="Tus gastos de siempre">
+            {favs.map((f) => (
+              <button key={`${f.desc}-${f.amount}`} type="button" className="chip bf-fav" onClick={() => quick(f)}>
+                + {f.desc} {money(f.amount, accountOf(state, f.accountId)?.currency)}
+              </button>
+            ))}
+          </div>
+        )}
         <form
           className="bf-add"
           onSubmit={(e) => {
@@ -139,7 +170,8 @@ export function TodayScreen({ state, today, now }: { state: AppState; today: ISO
                 <span role="cell" className="bf-desc">
                   {e.desc}
                   <small>
-                    {a?.name ?? '—'}
+                    <i className="bf-cat-dot" style={{ background: `var(${categoryInfo(categoryOf(e)).color})` }} aria-hidden="true" />
+                    {categoryInfo(categoryOf(e)).label} · {a?.name ?? '—'}
                     {e.forgot ? ' · olvidado' : ''}
                   </small>
                 </span>
@@ -203,6 +235,7 @@ function EditExpense({ state, e, onDone }: { state: AppState; e: Expense; onDone
   const [amount, setAmount] = useState(String(e.amount));
   const [acc, setAcc] = useState(e.accountId);
   const [time, setTime] = useState(e.time);
+  const [cat, setCat] = useState<Category>(categoryOf(e));
   const n = parseAmount(amount);
   return (
     <form
@@ -210,7 +243,7 @@ function EditExpense({ state, e, onDone }: { state: AppState; e: Expense; onDone
       onSubmit={(ev) => {
         ev.preventDefault();
         if (!n) return;
-        actions.updateExpense(e.id, { desc: desc.trim() || e.desc, amount: n, accountId: acc, time });
+        actions.updateExpense(e.id, { desc: desc.trim() || e.desc, amount: n, accountId: acc, time, category: cat === guessCategory(desc) && !e.category ? undefined : cat });
         onDone();
       }}
     >
@@ -220,6 +253,16 @@ function EditExpense({ state, e, onDone }: { state: AppState; e: Expense; onDone
       </label>
       <AmountField value={amount} onChange={setAmount} label="Costo" />
       <AccountSelect state={state} value={acc} onChange={setAcc} />
+      <label className="lbl-field">
+        <span>Categoría</span>
+        <select className="field" value={cat} onChange={(ev) => setCat(ev.target.value as Category)}>
+          {CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="lbl-field">
         <span>Hora</span>
         <input className="field" type="time" value={time} onChange={(ev) => setTime(ev.target.value || e.time)} />

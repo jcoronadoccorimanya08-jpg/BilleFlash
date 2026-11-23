@@ -4,7 +4,7 @@
  */
 import { FORGOT_PENALTY, LATE_PCT, MIN_CLOSED_PCT, MOUNTAIN_DAYS, ON_TIME_PCT, SOON_DAYS } from './config';
 import { addDays, addMonths, appDay, diffDays, maxDate, rangeDates, todayISO, type ISODate } from './dates';
-import type { Account, AppState, Bill, CapitalShot, Currency, Debt, Income } from './types';
+import type { Account, AppState, Bill, CapitalShot, Category, Currency, Debt, Expense, Goal, Income } from './types';
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -308,4 +308,213 @@ export function collectMessage(d: Debt, today: ISODate): string {
 
 export function whatsappLink(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+// ---------- Categorías ----------
+
+export interface CategoryInfo {
+  id: Category;
+  label: string;
+  /** Token de color (variable CSS) para las gráficas. */
+  color: string;
+  /** Palabras que la delatan (sin tildes, en minúscula). */
+  words: string[];
+}
+
+export const CATEGORIES: CategoryInfo[] = [
+  { id: 'comida', label: 'Comida', color: '--h2', words: ['almuerzo', 'desayuno', 'cena', 'comida', 'pollo', 'pan', 'huevo', 'sopa', 'menu', 'salteña', 'saltena', 'api', 'quinua', 'mercado', 'fruta', 'leche', 'arroz', 'fideo', 'carne', 'papa', 'tucumana', 'hamburguesa', 'pizza', 'broaster', 'plancha'] },
+  { id: 'pasaje', label: 'Pasaje', color: '--h1', words: ['pasaje', 'micro', 'minibus', 'trufi', 'taxi', 'teleferico', 'bus', 'transporte', 'uber', 'gasolina', 'moto'] },
+  { id: 'antojos', label: 'Antojos', color: '--h4', words: ['chicle', 'agua', 'aguita', 'soda', 'gaseosa', 'refresco', 'coca', 'dulce', 'chocolate', 'galleta', 'snack', 'helado', 'cafe', 'jugo', 'golosina', 'papitas', 'antojo', 'energizante', 'red bull'] },
+  { id: 'universidad', label: 'Universidad', color: '--h3', words: ['fotocopia', 'copias', 'impresion', 'libro', 'universidad', 'u ', 'cuaderno', 'material', 'separata', 'guia', 'curso', 'lapicero', 'bata', 'practica'] },
+  { id: 'salud', label: 'Salud', color: '--h6', words: ['farmacia', 'remedio', 'medicina', 'pastilla', 'doctor', 'consulta', 'gym', 'gimnasio', 'suplemento', 'proteina'] },
+  { id: 'casa', label: 'Casa', color: '--h5', words: ['luz', 'internet', 'alquiler', 'depa', 'gas', 'limpieza', 'jabon', 'detergente', 'papel', 'shampoo'] },
+  { id: 'otros', label: 'Otros', color: '--faint', words: [] },
+];
+
+const clean = (t: string) =>
+  ` ${t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]+/g, ' ')} `;
+
+/** Adivina la categoría por lo que escribiste («Almuerzo» → comida, «Chicle» → antojos). */
+export function guessCategory(desc: string): Category {
+  const t = clean(desc);
+  for (const c of CATEGORIES) if (c.words.some((w) => t.includes(w.endsWith(' ') ? ` ${w}` : w))) return c.id;
+  return 'otros';
+}
+
+export function categoryOf(e: Expense): Category {
+  return e.category ?? guessCategory(e.desc);
+}
+
+export function categoryInfo(id: Category): CategoryInfo {
+  return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1]!;
+}
+
+/** Lo gastado por categoría entre dos días (incluidos), en Bs. */
+export function spentByCategory(state: AppState, from: ISODate, to: ISODate): Record<Category, number> {
+  const out = Object.fromEntries(CATEGORIES.map((c) => [c.id, 0])) as Record<Category, number>;
+  for (const e of state.expenses) if (e.date >= from && e.date <= to) out[categoryOf(e)] += expenseBs(state, e.amount, e.accountId);
+  for (const k of Object.keys(out) as Category[]) out[k] = round2(out[k]);
+  return out;
+}
+
+// ---------- Favoritos de un toque ----------
+
+export interface Favorite {
+  desc: string;
+  amount: number;
+  accountId: string;
+  count: number;
+}
+
+/** Lo que más repites (mismo nombre y monto, al menos 2 veces en 30 días). */
+export function favorites(state: AppState, today: ISODate, n = 4): Favorite[] {
+  const from = addDays(today, -30);
+  const map = new Map<string, Favorite & { last: string }>();
+  for (const e of state.expenses) {
+    if (e.date < from || e.date > today) continue;
+    const key = `${clean(e.desc).trim()}|${e.amount}`;
+    const stamp = `${e.date} ${e.time}`;
+    const f = map.get(key);
+    if (!f) map.set(key, { desc: e.desc, amount: e.amount, accountId: e.accountId, count: 1, last: stamp });
+    else {
+      f.count++;
+      if (stamp > f.last) {
+        f.last = stamp;
+        f.accountId = e.accountId;
+        f.desc = e.desc;
+      }
+    }
+  }
+  return [...map.values()]
+    .filter((f) => f.count >= 2 && state.accounts.some((a) => a.id === f.accountId))
+    .sort((a, b) => b.count - a.count || b.last.localeCompare(a.last))
+    .slice(0, n)
+    .map(({ last: _l, ...f }) => {
+      void _l;
+      return f;
+    });
+}
+
+// ---------- Antojos ----------
+
+/**
+ * Cuánto te queda hoy para antojos: tu límite − lo gastado − lo que todavía te falta para comer
+ * (lo que sueles gastar en comida por día, según tus últimos 14 días, menos lo que ya comiste hoy).
+ */
+export function antojosLeft(state: AppState, today: ISODate): { left: number; reserve: number } {
+  const limit = quincenaStatus(state, today).limit;
+  const spent = spentOn(state, today);
+  const comida = (d: ISODate) => state.expenses.filter((e) => e.date === d && categoryOf(e) === 'comida').reduce((s, e) => s + expenseBs(state, e.amount, e.accountId), 0);
+  const past = rangeDates(addDays(today, -14), addDays(today, -1)).filter((d) => state.expenses.some((e) => e.date === d));
+  const avg = past.length ? past.reduce((s, d) => s + comida(d), 0) / past.length : 0;
+  const reserve = round2(Math.max(0, avg - comida(today)));
+  return { left: round2(Math.max(0, limit - spent - reserve)), reserve };
+}
+
+// ---------- Metas de ahorro ----------
+
+export function goalLeft(g: Goal): number {
+  return Math.max(0, round2(g.target - g.saved));
+}
+
+/** Para llegar a tiempo: cuánto apartar en cada quincena (null si la meta no tiene fecha o ya está). */
+export function goalPerQuincena(g: Goal, today: ISODate, days: number): { per: number; quincenas: number } | null {
+  const left = goalLeft(g);
+  if (!g.deadline || left <= 0) return null;
+  const quincenas = Math.max(1, Math.ceil(Math.max(0, diffDays(today, g.deadline)) / Math.max(1, days)));
+  return { per: round2(left / quincenas), quincenas };
+}
+
+/**
+ * Reparte el ahorro de una quincena entre tus metas: primero lo que pide cada meta con fecha (la más cercana
+ * primero) y lo que sobra, a la principal. Lo que no entra queda «sin asignar» en tu ahorro.
+ */
+export function allocateSaving(goals: Goal[], saving: number, today: ISODate, days: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  let rest = round2(saving);
+  const room = (g: Goal) => goalLeft(g) - (out[g.id] ?? 0);
+  const give = (g: Goal, n: number) => {
+    const a = round2(Math.min(n, room(g), rest));
+    if (a <= 0) return;
+    out[g.id] = round2((out[g.id] ?? 0) + a);
+    rest = round2(rest - a);
+  };
+  for (const g of [...goals].filter((x) => x.deadline).sort((a, b) => a.deadline!.localeCompare(b.deadline!))) {
+    const s = goalPerQuincena(g, today, days);
+    if (s) give(g, s.per);
+  }
+  const main = goals.find((g) => g.main) ?? goals[0];
+  if (main) give(main, rest);
+  return out;
+}
+
+/** Lo que tienes en tu cuenta de ahorro y todavía no es de ninguna meta (Bs). */
+export function unassignedSaving(state: AppState): number {
+  const r = state.settings.rate;
+  const total = state.accounts.filter((a) => a.kind === 'ahorro').reduce((s, a) => s + toBs(a.balance, a.currency, r), 0);
+  return round2(total - state.goals.reduce((s, g) => s + g.saved, 0));
+}
+
+export function mainGoal(state: AppState): Goal | undefined {
+  return state.goals.find((g) => g.main) ?? state.goals[0];
+}
+
+// ---------- Para las gráficas y el resumen ----------
+
+export interface DayBar {
+  date: ISODate;
+  spent: number;
+  limit: number;
+}
+
+/** Lo gastado de cada día contra tu límite (últimos n días). */
+export function dailyBars(state: AppState, today: ISODate, n = 14): DayBar[] {
+  const from = maxDate(state.settings.startDate, addDays(today, -(n - 1)));
+  if (from > today) return [];
+  return rangeDates(from, today).map((date) => ({ date, spent: spentOn(state, date), limit: quincenaStatus(state, date).limit }));
+}
+
+export interface QuincenaSummary {
+  q: Income;
+  from: ISODate;
+  to: ISODate;
+  /** ¿Ya terminó (llegó la siguiente)? */
+  done: boolean;
+  spent: number;
+  budget: number;
+  saving: number;
+  byCategory: Record<Category, number>;
+  daysWithin: number;
+  days: number;
+  nightsClosed: number;
+}
+
+/** Cada quincena: cuánto gastaste, en qué, cuánto ahorraste y cuántos días quedaste dentro del límite. */
+export function quincenaSummaries(state: AppState, today: ISODate, now: Date): QuincenaSummary[] {
+  const list = quincenas(state).filter((q) => q.date <= today);
+  return list
+    .map((q, i) => {
+      const next = list[i + 1];
+      const to = next ? addDays(next.date, -1) : today;
+      const dates = rangeDates(q.date, to);
+      const limit = quincenaStatus(state, q.date).limit;
+      return {
+        q,
+        from: q.date,
+        to,
+        done: Boolean(next),
+        spent: round2(dates.reduce((s, d) => s + spentOn(state, d), 0)),
+        budget: round2(q.amount - (q.quincena?.saving ?? 0)),
+        saving: q.quincena?.saving ?? 0,
+        byCategory: spentByCategory(state, q.date, to),
+        daysWithin: dates.filter((d) => spentOn(state, d) <= limit + 0.001).length,
+        days: dates.length,
+        nightsClosed: dates.filter((d) => dayStatus(state, d, now).kind === 'closed').length,
+      };
+    })
+    .reverse();
 }

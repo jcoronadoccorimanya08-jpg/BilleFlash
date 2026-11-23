@@ -5,7 +5,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { addDays, appDay, diffDays, type ISODate } from './dates';
-import { alerts, dayStatus, mountain, quincenaStatus, spentOn, streak } from './engine';
+import { alerts, antojosLeft, dayStatus, mainGoal, mountain, quincenaStatus, spentOn, streak } from './engine';
 import type { Accent, AppState } from './types';
 
 export interface WidgetFrame {
@@ -27,6 +27,10 @@ export interface WidgetFrame {
   usePct: number;
   /** Lo más urgente, en corto («Cobrar a …», «Internet atrasado»). */
   urgent: string | null;
+  /** Para antojos te quedan (Bs). En modo discreto, null. */
+  antojos: number | null;
+  /** Tu meta principal: % siempre; nombre y montos solo sin modo discreto. */
+  goal: { pct: number; name: string | null; saved: number | null; target: number | null } | null;
 }
 
 export interface WidgetPayload extends WidgetFrame {
@@ -45,6 +49,7 @@ export function buildWidgetFrame(state: AppState, now: Date): WidgetFrame {
   const spent = spentOn(state, today);
   const hide = state.settings.discreet;
   const first = alerts(state, today)[0];
+  const g = mainGoal(state);
   return {
     today,
     dayNumber: today < state.settings.startDate ? 0 : diffDays(state.settings.startDate, today) + 1,
@@ -57,6 +62,8 @@ export function buildWidgetFrame(state: AppState, now: Date): WidgetFrame {
     nextIn: q.nextIn,
     usePct: q.limit > 0 ? Math.round((spent / q.limit) * 100) : 0,
     urgent: first ? (hide ? first.short.replace(/\s*\(.*\)/, '') : first.short) : null,
+    antojos: hide || !(q.limit > 0) || spent > q.limit ? null : antojosLeft(state, today).left,
+    goal: g ? { pct: g.target > 0 ? Math.min(100, Math.round((g.saved / g.target) * 100)) : 0, name: hide ? null : g.name, saved: hide ? null : g.saved, target: hide ? null : g.target } : null,
   };
 }
 

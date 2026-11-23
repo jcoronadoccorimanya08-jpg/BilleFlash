@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccountSelect, AmountField } from '../components/bf';
 import { Icon } from '../components/Icon';
+import { CapitalCurve, CategoryBars, DayBars } from '../components/Charts';
 import { Mountain } from '../components/Mountain';
 import { PatternPad } from '../components/PatternPad';
 import { ScreenHeader, SectionTitle } from '../components/ui';
 import { canShareFiles, downloadBackupText, parseFile, serializeBackup, shareBackupText } from '../lib/backup';
-import { diffDays, localDateOf, type ISODate } from '../lib/dates';
-import { bestStreak, money, mountain, parseAmount, streak, dollars } from '../lib/engine';
+import { addDays, diffDays, formatShort, localDateOf, type ISODate } from '../lib/dates';
+import { bestStreak, dailyBars, dollars, money, mountain, parseAmount, quincenaSummaries, spentByCategory, streak } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { ACCENTS, THEMES } from '../lib/look';
 import { actions, biometricSupport, changePattern, currentBackup, disableBiometric, enableBiometric, openBackup, replaceState, verifyPattern } from '../lib/store';
@@ -24,15 +25,8 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
   const pen = (s: CapitalShot) => s.capital / s.rate;
   // En dólares: con el tipo de esa foto o, si no tenía, con el de hoy.
   const usdRate = state.settings.usdRate;
-  const usd = (s: CapitalShot) => (s.usd ?? usdRate ? dollars(pen(s) / (s.usd ?? usdRate)!) : '—');
+  const usd = (s: CapitalShot) => (s.usd ?? usdRate ? dollars(pen(s) / (s.usd ?? usdRate)!) : '$ —');
   const total = first && last ? last.capital - first.capital : 0;
-  // Línea simple del capital (en Bs), de la primera foto a la última.
-  const W = 320;
-  const H = 70;
-  const vals = shots.map((s) => s.capital);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const pts = vals.map((v, i) => `${vals.length > 1 ? (i / (vals.length - 1)) * W : W / 2},${H - 6 - (max === min ? 0.5 : (v - min) / (max - min)) * (H - 12)}`).join(' ');
   return (
     <>
       <SectionTitle aside={`${shots.length} ${shots.length === 1 ? 'foto' : 'fotos'}`}>Historial de tu capital</SectionTitle>
@@ -58,11 +52,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
                 </div>
               )}
             </div>
-            {shots.length > 1 && (
-              <svg className="bf-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
-                <polyline points={pts} fill="none" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-              </svg>
-            )}
+            <CapitalCurve shots={shots} usdRate={state.settings.usdRate} />
           </>
         ) : (
           <p className="muted">Todavía no hay fotos de tu capital.</p>
@@ -128,6 +118,64 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
   );
 }
 
+/** Tu quincena: en qué se te va, cada día contra tu límite y el resumen de las anteriores. */
+function QuincenaSection({ state, today, now }: { state: AppState; today: ISODate; now: Date }) {
+  const list = quincenaSummaries(state, today, now);
+  const cur = list[0];
+  const from = cur?.from ?? addDays(today, -14);
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <>
+      <SectionTitle aside={cur ? `desde el ${formatShort(cur.from)}` : 'últimos 15 días'}>Tu quincena</SectionTitle>
+      {cur && (
+        <div className="tiles">
+          <div className="tile">
+            <b>{money(cur.spent)}</b>
+            <span>Gastado de {money(cur.budget)}</span>
+          </div>
+          <div className="tile">
+            <b>
+              {cur.daysWithin}
+              <small>/{cur.days}</small>
+            </b>
+            <span>Días dentro del límite</span>
+          </div>
+        </div>
+      )}
+      <section className="card">
+        <h2 className="card-title">¿En qué se te va?</h2>
+        <CategoryBars data={spentByCategory(state, from, today)} />
+      </section>
+      <section className="card">
+        <h2 className="card-title">Cada día contra tu límite</h2>
+        <DayBars data={dailyBars(state, today, 14)} />
+      </section>
+      {list.length > 1 && (
+        <>
+          <SectionTitle>Quincenas anteriores</SectionTitle>
+          <div className="card list">
+            {list.slice(1).map((r) => (
+              <div key={r.q.id} className="item col">
+                <button type="button" className="bf-acc" onClick={() => setOpen(open === r.q.id ? null : r.q.id)} aria-expanded={open === r.q.id}>
+                  <span className="txt">
+                    <b>
+                      {formatShort(r.from)} al {formatShort(r.to)}
+                    </b>
+                    <span>
+                      Gastaste {money(r.spent)} de {money(r.budget)} · ahorraste {money(r.saving)} · {r.daysWithin}/{r.days} días dentro · {r.nightsClosed} noches cerradas
+                    </span>
+                  </span>
+                </button>
+                {open === r.q.id && <CategoryBars data={r.byCategory} />}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 export function ProgressScreen({ state, today, now, hasBio }: { state: AppState; today: ISODate; now: Date; hasBio: boolean }) {
   const m = mountain(state, now);
   const avgOf = (i: number) => {
@@ -153,6 +201,8 @@ export function ProgressScreen({ state, today, now, hasBio }: { state: AppState;
         {data.length ? <Mountain data={data} goal={100} /> : <p className="muted">Empieza cerrando tu primera noche.</p>}
         <p className="fine">100 %: cerraste antes de medianoche. 75 %: de madrugada. Cada olvido resta 15 %.</p>
       </section>
+
+      <QuincenaSection state={state} today={today} now={now} />
 
       <CapitalHistory state={state} today={today} />
 

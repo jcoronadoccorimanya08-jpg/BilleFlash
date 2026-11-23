@@ -5,7 +5,9 @@
 import { DEFAULT_ACCOUNTS, DEFAULT_RATE } from './config';
 import { isValidISODate } from './dates';
 import { isAccent, isTextSize, isTheme } from './look';
-import type { Account, AccountKind, AppState, Bill, CapitalShot, Currency, DayLog, Debt, DebtPayment, Expense, Income, Settings, Transfer } from './types';
+import type { Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, Transfer } from './types';
+
+const CATS: Category[] = ['comida', 'pasaje', 'antojos', 'universidad', 'salud', 'casa', 'otros'];
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -57,7 +59,7 @@ function sanitizeExpenses(v: unknown, ids: Set<string>): Expense[] {
     if (!isObj(e) || !isValidISODate(e.date) || !ids.has(str(e.accountId, 40))) continue;
     const amount = pos(e.amount);
     if (!amount) continue;
-    out.push({ id: str(e.id, 40) || newId(), date: e.date, time: time(e.time), desc: str(e.desc, 60) || 'Gasto', amount, accountId: str(e.accountId, 40), ...(e.forgot === true ? { forgot: true } : {}) });
+    out.push({ id: str(e.id, 40) || newId(), date: e.date, time: time(e.time), desc: str(e.desc, 60) || 'Gasto', amount, accountId: str(e.accountId, 40), ...(e.forgot === true ? { forgot: true } : {}), ...(CATS.includes(e.category as Category) ? { category: e.category as Category } : {}) });
   }
   return out;
 }
@@ -68,7 +70,12 @@ function sanitizeIncomes(v: unknown, ids: Set<string>): Income[] {
     if (!isObj(e) || !isValidISODate(e.date) || !ids.has(str(e.accountId, 40))) continue;
     const amount = pos(e.amount);
     if (!amount) continue;
-    const q = isObj(e.quincena) ? { saving: pos(e.quincena.saving) ?? 0 } : undefined;
+    let q: Income['quincena'] = undefined;
+    if (isObj(e.quincena)) {
+      const goals: Record<string, number> = {};
+      if (isObj(e.quincena.goals)) for (const [k, n] of Object.entries(e.quincena.goals)) if (pos(n)) goals[k.slice(0, 40)] = pos(n)!;
+      q = { saving: pos(e.quincena.saving) ?? 0, ...(Object.keys(goals).length ? { goals } : {}) };
+    }
     out.push({ id: str(e.id, 40) || newId(), date: e.date, time: time(e.time), desc: str(e.desc, 60) || 'Ingreso', amount, accountId: str(e.accountId, 40), ...(q ? { quincena: q } : {}) });
   }
   return out;
@@ -189,6 +196,31 @@ function sanitizeSettings(v: unknown): Settings | null {
   };
 }
 
+export function sanitizeGoals(v: unknown): Goal[] {
+  const out: Goal[] = [];
+  for (const g of arr(v)) {
+    if (!isObj(g)) continue;
+    const name = str(g.name, 40);
+    const target = pos(g.target);
+    if (!name || !target) continue;
+    out.push({
+      id: str(g.id, 40) || newId(),
+      name,
+      target,
+      saved: pos(g.saved) ?? 0,
+      ...(isValidISODate(g.deadline) ? { deadline: g.deadline } : {}),
+      ...(g.main === true ? { main: true } : {}),
+    });
+  }
+  // Una sola principal.
+  let seen = false;
+  for (const g of out) {
+    if (g.main && seen) delete g.main;
+    if (g.main) seen = true;
+  }
+  return out;
+}
+
 export function sanitizeState(v: unknown): AppState | null {
   if (!isObj(v) || v.schema !== 1) return null;
   const settings = sanitizeSettings(v.settings);
@@ -208,5 +240,6 @@ export function sanitizeState(v: unknown): AppState | null {
     debts: sanitizeDebts(v.debts),
     bills: sanitizeBills(v.bills),
     shots: sanitizeShots(v.shots),
+    goals: sanitizeGoals(v.goals),
   };
 }

@@ -151,3 +151,35 @@ test('día cerrado de madrugada vale 75 % y la montaña lo muestra', async ({ pa
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText('+Bs 0');
 });
+
+test('metas de ahorro: la quincena reparte el ahorro y los favoritos anotan de un toque', async ({ page }) => {
+  await setupFromFile(page);
+  await nav(page, 'Cuentas');
+  await page.getByRole('button', { name: 'Nueva meta' }).click();
+  await page.getByLabel('Para qué').fill('Fondo');
+  await page.getByLabel('Cuánto quieres juntar (Bs)').fill('100');
+  await page.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.locator('.bf-goal')).toContainText('⭐ Fondo');
+  await page.getByRole('button', { name: 'Avance' }).click();
+  await page.getByLabel('Cuánto va al ahorro (Bs)').fill('30');
+  await page.getByRole('button', { name: 'Guardar' }).first().click();
+  await nav(page, 'Hoy');
+  await page.getByRole('button', { name: 'Entró plata' }).click();
+  await page.getByLabel('Monto (Bs)').fill('300');
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
+  await nav(page, 'Cuentas');
+  await expect(page.locator('.bf-goal')).toContainText('Bs 30 de Bs 100 · 30 %');
+
+  // Dos veces lo mismo → aparece como favorito.
+  await nav(page, 'Hoy');
+  for (let i = 0; i < 2; i++) {
+    await page.getByLabel('Descripción').fill('Pasaje');
+    await page.getByLabel('Costo').fill('3');
+    await page.getByRole('button', { name: 'Agregar gasto' }).click();
+  }
+  await page.getByRole('button', { name: '+ Pasaje Bs 3' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Pasaje' })).toHaveCount(3);
+  await expect(page.getByRole('row').filter({ hasText: 'Pasaje' }).first()).toContainText('Pasaje · Monedas');
+  await nav(page, 'Avance');
+  await expect(page.locator('.bf-cat-row').filter({ hasText: 'Pasaje' })).toContainText('Bs 9');
+});

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AccountSelect, AmountField, Money } from '../components/bf';
+import { GoalsSection } from '../components/Goals';
 import { Icon } from '../components/Icon';
 import { ScreenHeader, SectionTitle, Sheet } from '../components/ui';
 import { CURRENCY_SIGN, KIND_LABEL } from '../lib/config';
@@ -61,6 +62,8 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
         </div>
         <p className="fine">Lo que tienes + lo que te deben − lo que debes, todo en Bs con tu tipo de cambio.</p>
       </section>
+
+      <GoalsSection state={state} today={today} />
 
       {groups.map(([title, list]) =>
         list.length ? (
