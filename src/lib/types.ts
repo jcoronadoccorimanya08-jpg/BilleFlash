@@ -1,0 +1,150 @@
+import type { ISODate } from './dates';
+
+export type Theme = 'system' | 'dark' | 'light' | 'black';
+export type Accent = 'verde' | 'violeta' | 'lima' | 'rosa';
+export type TextSize = 'normal' | 'grande';
+
+/** Bolivianos o soles. */
+export type Currency = 'BOB' | 'PEN';
+
+export type AccountKind = 'efectivo' | 'banco' | 'billetera' | 'ahorro';
+
+/** Dónde está tu plata: un banco, tus billetes, tus monedas, Yape, Binance, tu ahorro… */
+export interface Account {
+  id: string;
+  name: string;
+  currency: Currency;
+  kind: AccountKind;
+  /** Saldo actual, en su moneda. */
+  balance: number;
+}
+
+/** Un gasto del día. */
+export interface Expense {
+  id: string;
+  /** Día de la app (cambia a las 4:00). */
+  date: ISODate;
+  /** «HH:MM». */
+  time: string;
+  desc: string;
+  /** Monto en la moneda de la cuenta. */
+  amount: number;
+  accountId: string;
+  /** Lo marcaste como olvidado (o lo agregaste después de cerrar el día): resta 15 %. */
+  forgot?: boolean;
+}
+
+/** Plata que entró (un cobro, un regalo, una quincena…). */
+export interface Income {
+  id: string;
+  date: ISODate;
+  time: string;
+  desc: string;
+  amount: number;
+  accountId: string;
+  /** Si es una quincena: cuánto se fue al ahorro. */
+  quincena?: { saving: number };
+}
+
+/** Pasaste plata de una cuenta a otra (sacar del banco, cambiar soles…). */
+export interface Transfer {
+  id: string;
+  date: ISODate;
+  time: string;
+  from: string;
+  to: string;
+  /** Lo que sale, en la moneda de «from». */
+  amount: number;
+  /** Lo que entra, en la moneda de «to». */
+  received: number;
+}
+
+export interface DayLog {
+  /** Cuándo tocaste «Cerrar mi día» (ISO). */
+  closedAt?: string;
+}
+
+export interface DebtPayment {
+  date: ISODate;
+  /** En la moneda de la deuda. */
+  amount: number;
+  /** La cuenta donde entró (te pagan) o de donde salió (pagas). Vacío: no pasó por tus cuentas. */
+  accountId?: string;
+}
+
+/** Una deuda, siempre en su moneda (no se cruza sola con otra). */
+export interface Debt {
+  id: string;
+  /** «me-deben»: te deben a ti. «debo»: tú debes. */
+  dir: 'me-deben' | 'debo';
+  person: string;
+  currency: Currency;
+  amount: number;
+  note?: string;
+  /** Plan de cuotas: cuánto y cada cuántos días, desde una fecha. */
+  plan?: { amount: number; everyDays: number; start: ISODate };
+  payments: DebtPayment[];
+}
+
+/** Un pago que se repite: depa, luz, internet, Claude, gym, agua… */
+export interface Bill {
+  id: string;
+  name: string;
+  amount: number;
+  currency: Currency;
+  /** Mensual (con su día) o cuando llega el recibo. */
+  kind: 'mensual' | 'recibo';
+  /** La próxima fecha que falta pagar. Sin fecha: no hay recibo pendiente. */
+  nextDue?: ISODate;
+  /** «mio»: sale de tus cuentas. «depa»: de la plata del depa que te mandan aparte. */
+  source: 'mio' | 'depa';
+  /** Pagos hechos (para el historial). */
+  paid: { date: ISODate; due: ISODate; amount: number; accountId?: string }[];
+}
+
+/** Foto de tu capital al cerrar un día (tu tabla amarilla, pero sola). En Bs. */
+export interface CapitalShot {
+  date: ISODate;
+  time: string;
+  rate: number;
+  enMano: number;
+  meDeben: number;
+  debo: number;
+  capital: number;
+}
+
+export interface Settings {
+  /** Desde cuándo cuenta la racha. */
+  startDate: ISODate;
+  /** Tipo de cambio: cuántos Bs vale 1 sol. Cambia cuando quieras. */
+  rate: number;
+  /** Tu quincena. */
+  quincena: { amount: number; saving: number; days: number };
+  /** Lo que te sobró antes de usar la app (pasa a tu primera quincena). */
+  carryStart: number;
+  /** Cuenta donde va el ahorro de cada quincena. */
+  savingAccountId?: string;
+  /** Widget: ocultar montos. */
+  discreet: boolean;
+  /** Tu nombre corto para las frases (opcional, se escribe en la app). */
+  nick?: string;
+  theme: Theme;
+  accent?: Accent;
+  textSize?: TextSize;
+  autoLockMinutes: number;
+  lastBackupAt?: string;
+  createdAt: string;
+}
+
+export interface AppState {
+  schema: 1;
+  settings: Settings;
+  accounts: Account[];
+  expenses: Expense[];
+  incomes: Income[];
+  transfers: Transfer[];
+  days: Record<ISODate, DayLog>;
+  debts: Debt[];
+  bills: Bill[];
+  shots: CapitalShot[];
+}

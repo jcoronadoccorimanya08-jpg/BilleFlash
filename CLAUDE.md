@@ -1,0 +1,32 @@
+# BilleFlash — guía para Claude
+
+PWA personal de plata: anotar gastos en segundos, límite diario, cuentas en Bs y soles, deudas con cuotas y pagos que se repiten. Se usa en un Android, instalada desde Chrome. Independiente de Val Q y Bitácora: no compartas código en tiempo de ejecución ni datos.
+
+## Privacidad: reglas que no se rompen
+
+- **El repositorio y el sitio son públicos.** Nunca pongas en el código, en los commits ni en los issues datos de la persona: montos, nombres de personas, bancos propios, deudas, pagos, fechas personales ni respaldos. Los valores por defecto van sin montos.
+- Lo personal entra **solo desde el teléfono**: a mano o con un archivo de inicio (`kind: 'config'`) que nunca se sube (`.gitignore` bloquea los nombres habituales).
+- Las tres apps comparten el mismo sitio (mismo origen): todas las llaves de guardado empiezan con `billeflash.` y la base IndexedDB es `billeflash-v1`. Nunca leas ni borres llaves de otra app.
+- Los datos se guardan **solo cifrados** (`src/lib/vault.ts`), con patrón (PBKDF2) y opcionalmente huella (passkey con PRF). Sin cifrar solo tema y apariencia (`billeflash.theme`, `billeflash.look`) y el aviso de instalación.
+- Sin servidores, analítica ni librerías que llamen a internet. «Cobrar por WhatsApp» solo abre un enlace `wa.me` con el texto; la persona elige a quién mandarlo.
+- **Widget (app «Rachas»)** (`src/lib/widget.ts`): por postMessage, solo dentro del teléfono, se manda racha, montaña, gastado/límite, disponible, días a la quincena y lo urgente en corto. En **modo discreto** (`settings.discreet`) van sin montos.
+
+## Reglas del producto
+
+- Interfaz en **español de Bolivia**, directo y respetuoso. **Sin culpa**: pasarse del límite es información.
+- **El día cambia a las 4:00** de La Paz (`appDay`): lo anotado de 00:00 a 03:59 cuenta para el día anterior.
+- **Racha de la noche**: sube con «Cerrar mi día». Antes de medianoche vale 100 %; de 00:00 a 03:59, 75 %. Cada gasto olvidado (marcado o agregado después de cerrar) resta 15 %, mínimo 10 %. Sin cerrar a las 4:00: 0 % y corta. Hoy sin cerrar no corta. La montaña dibuja ese %.
+- **Quincena**: al registrarla, el ahorro se aparta solo a la cuenta de ahorro. Límite diario **fijo** = (quincena − ahorro) ÷ días (15). Lo que sobra o falta pasa a la siguiente (`carry`).
+- **Capital** = en mano + me deben − debo, en Bs con el tipo de cambio (variable, lo escribe la persona). Cada cierre guarda una foto (`shots`).
+- **Deudas** en su moneda, nunca se cruzan solas; plan de cuotas opcional (`nextInstallment`).
+- **Pagos**: mensuales (con `nextDue`, cuenta meses atrasados) o «cuando llega el recibo». `source: 'depa'` no sale de las cuentas propias.
+- Anotar un gasto debe tomar menos de 5 segundos; los botones miden 48 px o más.
+
+## Reglas técnicas
+
+- Fechas siempre en `America/La_Paz` (`src/lib/dates.ts`). Nunca `toISOString().slice(0, 10)` sobre la hora actual.
+- Reglas en `src/lib/engine.ts` como funciones puras con pruebas en `tests/` (se pasa `now`). Si cambias una regla, cambia la prueba.
+- Estado con `schema: 1`, validado en `src/lib/sanitize.ts`. Si cambias el formato, sube `schema` y migra. Nunca pierdas datos.
+- Respaldo: archivo `.txt`, con compartir, guardar y copiar.
+- Estilos: tokens de `src/styles/app.css` (sección «BilleFlash»).
+- Antes de entregar: `npm run check`. El push a `main` publica en GitHub Pages (`/BilleFlash/`).
