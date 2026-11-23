@@ -114,6 +114,10 @@ test('archivo de inicio: capital, quincena con ahorro, cobros y pagos atrasados'
   await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
   await expect(ana).toContainText('S/ 80');
   await expect(ana).toContainText('Próxima cuota: S/ 20 · el 30 nov');
+  // El cobro entró a una cuenta (efectivo): tu capital no cambia (390 + la quincena de 300).
+  await nav(page, 'Cuentas');
+  await expect(page.locator('.bf-cap-main b')).toHaveText('Bs 690');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Monedas' })).toContainText('Bs 130');
 
   await nav(page, 'Pagos');
   const internet = page.locator('.bf-bill').filter({ hasText: 'Internet' });
@@ -134,5 +138,12 @@ test('día cerrado de madrugada vale 75 % y la montaña lo muestra', async ({ pa
   await expect(page.getByText('Día cerrado · 75 %')).toBeVisible();
   await nav(page, 'Avance');
   await expect(page.locator('.tile').filter({ hasText: 'Noches seguidas' })).toContainText('1');
-  await expect(page.locator('.bf-shot').nth(1)).toContainText('Bs 360');
+  // Tabla como el Excel: N° 1 al empezar y N° 2 al cerrar; «Anotar mi capital ahora» agrega otra.
+  const rows = page.locator('.bf-hist tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText('Bs 360');
+  await expect(rows.last()).toContainText('inicio');
+  await page.getByRole('button', { name: 'Anotar mi capital ahora' }).click();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText('+Bs 0');
 });

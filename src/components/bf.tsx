@@ -46,6 +46,7 @@ export function PayForm({
   accountLabelText,
   allowNone,
   noneLabel,
+  defaultNone,
   confirm,
   onDone,
 }: {
@@ -55,11 +56,13 @@ export function PayForm({
   accountLabelText: string;
   allowNone?: boolean;
   noneLabel?: string;
+  /** Empieza en «no pasó por mis cuentas» (solo para pagos del depa). */
+  defaultNone?: boolean;
   confirm: string;
   onDone: (amount: number, accountId: string | undefined) => void;
 }) {
   const [amount, setAmount] = useState(initial ? String(initial) : '');
-  const [acc, setAcc] = useState(allowNone ? '' : state.accounts[0]?.id ?? '');
+  const [acc, setAcc] = useState(defaultNone ? '' : (state.accounts.find((a) => a.kind === 'efectivo') ?? state.accounts[0])?.id ?? '');
   const n = parseAmount(amount);
   return (
     <form

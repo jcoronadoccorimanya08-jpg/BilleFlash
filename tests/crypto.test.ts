@@ -39,6 +39,9 @@ describe('cifrado por sobre', () => {
     const back = sanitizeState(await decryptJSON(key, sealed));
     expect(back?.debts[0]?.person).toBe('Persona privada');
     expect(back?.accounts.length).toBe(3);
+    // Fila N° 1 del historial: cómo empiezas.
+    expect(back?.shots).toHaveLength(1);
+    expect(back?.shots[0]?.date).toBe('2026-11-08');
   });
 
   it('cada guardado usa un vector distinto', async () => {

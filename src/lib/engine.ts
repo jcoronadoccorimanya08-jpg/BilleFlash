@@ -186,7 +186,8 @@ export function capital(state: AppState): Capital {
 
 export function shotOf(state: AppState, date: ISODate, time: string): CapitalShot {
   const c = capital(state);
-  return { date, time, rate: state.settings.rate, enMano: c.enMano, meDeben: c.meDeben, debo: c.debo, capital: c.capital };
+  const usd = state.settings.usdRate;
+  return { date, time, rate: state.settings.rate, ...(usd ? { usd } : {}), enMano: c.enMano, meDeben: c.meDeben, debo: c.debo, capital: c.capital };
 }
 
 // ---------- Cuotas de deudas ----------

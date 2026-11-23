@@ -294,7 +294,9 @@ export function initialState(o: StartData): AppState {
     autoLockMinutes: 1,
     createdAt: new Date().toISOString(),
   };
-  return { schema: 1, settings, accounts, expenses: [], incomes: [], transfers: [], days: {}, debts: o.debts ?? [], bills: o.bills ?? [], shots: [] };
+  const st: AppState = { schema: 1, settings, accounts, expenses: [], incomes: [], transfers: [], days: {}, debts: o.debts ?? [], bills: o.bills ?? [], shots: [] };
+  // Fila N° 1 de tu historial: cómo empiezas.
+  return { ...st, shots: [shotOf(st, o.startDate, clockOf())] };
 }
 
 // ---------- Acciones ----------
@@ -402,7 +404,7 @@ export const actions = {
       if (st.days[day]?.closedAt || day !== appDay(now)) return st;
       const next = { ...st, days: { ...st.days, [day]: { closedAt: now.toISOString() } } };
       const shot = shotOf(next, day, clockOf(now));
-      return { ...next, shots: [...st.shots.filter((s) => s.date !== day), shot] };
+      return { ...next, shots: [...st.shots, shot] };
     });
   },
 
@@ -424,6 +426,18 @@ export const actions = {
       const acc = accountOf(st, id);
       if (used || !acc || acc.balance !== 0 || st.accounts.length <= 1) return st;
       return { ...st, accounts: st.accounts.filter((a) => a.id !== id) };
+    });
+  },
+  /** «Anotar mi capital ahora»: una foto más en tu historial, a cualquier hora. */
+  snapshot(day: ISODate, now: Date = new Date()) {
+    update((st) => ({ ...st, shots: [...st.shots, shotOf(st, day, clockOf(now))] }));
+  },
+  setUsdRate(rate: number | null) {
+    updateSettings((s) => {
+      const next = { ...s };
+      if (rate && rate > 0) next.usdRate = round2(rate * 1000) / 1000;
+      else delete next.usdRate;
+      return next;
     });
   },
   setRate(rate: number) {

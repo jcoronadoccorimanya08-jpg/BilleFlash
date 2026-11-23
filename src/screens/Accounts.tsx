@@ -83,7 +83,7 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
       </div>
 
       <Sheet open={rate} title="Tipo de cambio de hoy" onClose={() => setRate(false)}>
-        <RateForm rate={s.rate} onDone={() => setRate(false)} />
+        <RateForm rate={s.rate} usd={s.usdRate} onDone={() => setRate(false)} />
       </Sheet>
       <Sheet open={Boolean(square)} title={square ? `Cuadrar ${square.name}` : ''} onClose={() => setSquare(null)}>
         {square && <SquareForm a={square} state={state} onDone={() => setSquare(null)} />}
@@ -98,8 +98,9 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
   );
 }
 
-function RateForm({ rate, onDone }: { rate: number; onDone: () => void }) {
+function RateForm({ rate, usd, onDone }: { rate: number; usd?: number; onDone: () => void }) {
   const [v, setV] = useState(String(rate));
+  const [u, setU] = useState(usd ? String(usd) : '');
   const n = parseAmount(v);
   return (
     <form
@@ -108,11 +109,13 @@ function RateForm({ rate, onDone }: { rate: number; onDone: () => void }) {
         e.preventDefault();
         if (!n) return;
         actions.setRate(n);
+        actions.setUsdRate(parseAmount(u));
         toast(`Tipo de cambio: ${n}`, 'success');
         onDone();
       }}
     >
       <AmountField value={v} onChange={setV} label="Cuántos Bs vale 1 sol" autoFocus />
+      <AmountField value={u} onChange={setU} label="Cuántos soles vale 1 dólar (opcional)" placeholder="Vacío: sin columna en dólares" />
       <p className="fine">Cambia cuando quieras. Cada vez que cierras tu día, la foto de tu capital guarda el de ese día.</p>
       <button type="submit" className="btn primary" disabled={!n}>
         Guardar

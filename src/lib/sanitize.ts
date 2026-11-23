@@ -161,7 +161,8 @@ function sanitizeShots(v: unknown): CapitalShot[] {
     if (!isObj(s) || !isValidISODate(s.date)) continue;
     const [rate, enMano, meDeben, debo, capital] = [num(s.rate), num(s.enMano), num(s.meDeben), num(s.debo), num(s.capital)];
     if ([rate, enMano, meDeben, debo, capital].some((x) => x === null)) continue;
-    out.push({ date: s.date, time: time(s.time), rate: rate!, enMano: enMano!, meDeben: meDeben!, debo: debo!, capital: capital! });
+    const usd = pos(s.usd);
+    out.push({ date: s.date, time: time(s.time), rate: rate!, ...(usd ? { usd } : {}), enMano: enMano!, meDeben: meDeben!, debo: debo!, capital: capital! });
   }
   return out;
 }
@@ -173,6 +174,7 @@ function sanitizeSettings(v: unknown): Settings | null {
   return {
     startDate: v.startDate,
     rate: rate && rate > 0 ? rate : DEFAULT_RATE,
+    ...(pos(v.usdRate) ? { usdRate: pos(v.usdRate)! } : {}),
     quincena: { amount: pos(q.amount) ?? 0, saving: pos(q.saving) ?? 0, days: Math.max(1, Math.round(pos(q.days) ?? 15)) },
     carryStart: num(v.carryStart) ?? 0,
     ...(str(v.savingAccountId, 40) ? { savingAccountId: str(v.savingAccountId, 40) } : {}),

@@ -107,6 +107,8 @@ export interface CapitalShot {
   date: ISODate;
   time: string;
   rate: number;
+  /** Soles por 1 dólar, si lo escribiste (para la columna en dólares). */
+  usd?: number;
   enMano: number;
   meDeben: number;
   debo: number;
@@ -118,6 +120,8 @@ export interface Settings {
   startDate: ISODate;
   /** Tipo de cambio: cuántos Bs vale 1 sol. Cambia cuando quieras. */
   rate: number;
+  /** Soles por 1 dólar (opcional, solo para ver tu capital en dólares). */
+  usdRate?: number;
   /** Tu quincena. */
   quincena: { amount: number; saving: number; days: number };
   /** Lo que te sobró antes de usar la app (pasa a tu primera quincena). */

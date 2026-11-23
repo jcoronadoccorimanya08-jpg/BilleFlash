@@ -78,6 +78,7 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
               accountLabelText="De dónde salió"
               allowNone
               noneLabel={pay.source === 'depa' ? 'Plata del depa (aparte)' : 'No pasó por mis cuentas'}
+              defaultNone={pay.source === 'depa'}
               confirm="Pagado"
               onDone={(amount, acc) => {
                 actions.payBill(pay.id, today, amount, acc);

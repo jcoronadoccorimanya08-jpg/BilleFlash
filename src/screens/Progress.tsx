@@ -5,13 +5,125 @@ import { Mountain } from '../components/Mountain';
 import { PatternPad } from '../components/PatternPad';
 import { ScreenHeader, SectionTitle } from '../components/ui';
 import { canShareFiles, downloadBackupText, parseFile, serializeBackup, shareBackupText } from '../lib/backup';
-import { diffDays, formatShort, localDateOf, type ISODate } from '../lib/dates';
+import { diffDays, localDateOf, type ISODate } from '../lib/dates';
 import { bestStreak, money, mountain, parseAmount, streak } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { ACCENTS, THEMES } from '../lib/look';
 import { actions, biometricSupport, changePattern, currentBackup, disableBiometric, enableBiometric, openBackup, replaceState, verifyPattern } from '../lib/store';
-import type { AppState } from '../lib/types';
+import type { AppState, CapitalShot } from '../lib/types';
 import type { VaultRecord } from '../lib/vault';
+
+/** Tu tabla amarilla, pero sola: cada foto de tu capital, en orden, con cuánto subió o bajó. */
+function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
+  const shots = state.shots;
+  const [all, setAll] = useState(false);
+  const first = shots[0];
+  const last = shots[shots.length - 1];
+  const rows = shots.map((s, i) => ({ s, n: i + 1, diff: i > 0 ? s.capital - shots[i - 1]!.capital : null })).reverse();
+  const shown = all ? rows : rows.slice(0, 10);
+  const pen = (s: CapitalShot) => s.capital / s.rate;
+  const total = first && last ? last.capital - first.capital : 0;
+  // Línea simple del capital (en Bs), de la primera foto a la última.
+  const W = 320;
+  const H = 70;
+  const vals = shots.map((s) => s.capital);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const pts = vals.map((v, i) => `${vals.length > 1 ? (i / (vals.length - 1)) * W : W / 2},${H - 6 - (max === min ? 0.5 : (v - min) / (max - min)) * (H - 12)}`).join(' ');
+  return (
+    <>
+      <SectionTitle aside={`${shots.length} ${shots.length === 1 ? 'foto' : 'fotos'}`}>Historial de tu capital</SectionTitle>
+      <section className="card">
+        {last ? (
+          <>
+            <div className="bf-hist-top">
+              <div>
+                <span className="muted">Hoy tienes</span>
+                <b>{money(last.capital)}</b>
+                <small className="muted">
+                  {money(pen(last), 'PEN')}
+                  {last.usd ? ` · $ ${(pen(last) / last.usd).toFixed(2)}` : ''}
+                </small>
+              </div>
+              {shots.length > 1 && (
+                <div className="bf-right">
+                  <span className="muted">Desde que empezaste</span>
+                  <b className={total >= 0 ? 'ok' : 'over'}>
+                    {total >= 0 ? '+' : '−'}
+                    {money(Math.abs(total))}
+                  </b>
+                </div>
+              )}
+            </div>
+            {shots.length > 1 && (
+              <svg className="bf-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+                <polyline points={pts} fill="none" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              </svg>
+            )}
+          </>
+        ) : (
+          <p className="muted">Todavía no hay fotos de tu capital.</p>
+        )}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            actions.snapshot(today);
+            toast('Foto de tu capital guardada.', 'success');
+          }}
+        >
+          <Icon name="image" size={18} /> Anotar mi capital ahora
+        </button>
+      </section>
+      {rows.length > 0 && (
+        <div className="card bf-hist-wrap">
+          <table className="bf-hist">
+            <thead>
+              <tr>
+                <th>N°</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>Capital Bs</th>
+                <th>Capital S/</th>
+                {shots.some((s) => s.usd) && <th>En $</th>}
+                <th>Cambio</th>
+                <th>En mano</th>
+                <th>Te deben</th>
+                <th>Debes</th>
+                <th>TC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(({ s, n, diff }) => (
+                <tr key={n}>
+                  <td>{n}</td>
+                  <td>{s.date.slice(8, 10)}/{s.date.slice(5, 7)}/{s.date.slice(2, 4)}</td>
+                  <td>{s.time}</td>
+                  <td>
+                    <b>{money(s.capital)}</b>
+                  </td>
+                  <td>{money(pen(s), 'PEN')}</td>
+                  {shots.some((x) => x.usd) && <td>{s.usd ? `$ ${(pen(s) / s.usd).toFixed(2)}` : '—'}</td>}
+                  <td className={diff === null ? 'muted' : diff >= 0 ? 'ok' : 'over'}>{diff === null ? 'inicio' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}`}</td>
+                  <td>{money(s.enMano)}</td>
+                  <td>{money(s.meDeben)}</td>
+                  <td>{money(s.debo)}</td>
+                  <td>{s.rate}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rows.length > 10 && (
+        <button type="button" className="btn ghost" onClick={() => setAll(!all)}>
+          {all ? 'Ver solo las últimas 10' : `Ver las ${rows.length} fotos`}
+        </button>
+      )}
+      <p className="fine">Desliza la tabla hacia los lados para ver todas las columnas. Capital = en mano + te deben − debes.</p>
+    </>
+  );
+}
 
 export function ProgressScreen({ state, today, now, hasBio }: { state: AppState; today: ISODate; now: Date; hasBio: boolean }) {
   const m = mountain(state, now);
@@ -20,7 +132,6 @@ export function ProgressScreen({ state, today, now, hasBio }: { state: AppState;
     return w.reduce((s, x) => s + x.pct, 0) / w.length;
   };
   const data = m.map((x, i) => ({ date: x.date, pct: x.pct, avg7: avgOf(i), won: x.closed }));
-  const shots = [...state.shots].reverse().slice(0, 15);
   return (
     <main className="screen">
       <ScreenHeader eyebrow="Tu hábito de revisar" title="Avance" />
@@ -40,28 +151,7 @@ export function ProgressScreen({ state, today, now, hasBio }: { state: AppState;
         <p className="fine">100 %: cerraste antes de medianoche. 75 %: de madrugada. Cada olvido resta 15 %.</p>
       </section>
 
-      <SectionTitle>Tu capital, día a día</SectionTitle>
-      <div className="card bf-shots">
-        {shots.length === 0 && <p className="muted">Cada vez que cierras tu día se guarda una foto de tu capital.</p>}
-        {shots.length > 0 && (
-          <div className="bf-shot head">
-            <span>Fecha</span>
-            <span>Capital</span>
-            <span>En mano</span>
-            <span>TC</span>
-          </div>
-        )}
-        {shots.map((s) => (
-          <div key={s.date} className="bf-shot">
-            <span>
-              {formatShort(s.date)} <small>{s.time}</small>
-            </span>
-            <span>{money(s.capital)}</span>
-            <span>{money(s.enMano)}</span>
-            <span>{s.rate}</span>
-          </div>
-        ))}
-      </div>
+      <CapitalHistory state={state} today={today} />
 
       <Settings state={state} today={today} hasBio={hasBio} />
     </main>
