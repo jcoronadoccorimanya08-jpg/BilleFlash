@@ -96,10 +96,14 @@ test('archivo de inicio: capital, quincena con ahorro, cobros y pagos atrasados'
   await nav(page, 'Cuentas');
   // 50 + 100 + 10×3,5 = 185 en mano; te deben 350; debes 175 → 360.
   await expect(page.locator('.bf-cap-main b')).toHaveText('Bs 360');
-  await page.getByRole('button', { name: /Bs por 1 sol/ }).click();
+  await page.getByRole('button', { name: /Bs = 1 S\//  }).click();
   await page.getByLabel('Cuántos Bs vale 1 sol').fill('4');
+  await page.getByLabel('Cuántos soles vale 1 dólar').fill('2');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.locator('.bf-cap-main b')).toHaveText('Bs 390');
+  // 390 Bs ÷ 4 = S/ 97,50 ÷ 2 = $ 48,75
+  await expect(page.locator('.bf-cap-other')).toContainText('S/ 97,5');
+  await expect(page.locator('.bf-cap-other')).toContainText('$ 48,75');
 
   await nav(page, 'Hoy');
   await page.getByRole('button', { name: 'Entró plata' }).click();

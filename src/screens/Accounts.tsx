@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { ScreenHeader, SectionTitle, Sheet } from '../components/ui';
 import { CURRENCY_SIGN, KIND_LABEL } from '../lib/config';
 import type { ISODate } from '../lib/dates';
-import { accountOf, capital, money, parseAmount } from '../lib/engine';
+import { accountOf, capital, dollars, money, parseAmount } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { actions, convert } from '../lib/store';
 import type { Account, AccountKind, AppState, Currency } from '../lib/types';
@@ -29,7 +29,10 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
         <div className="bf-cap-main">
           <span className="muted">Tu capital</span>
           <b>{money(c.capital)}</b>
-          <small className="muted">= {money(c.capital / s.rate, 'PEN')}</small>
+          <div className="bf-cap-other">
+            <span>{money(c.capital / s.rate, 'PEN')}</span>
+            <span>{s.usdRate ? dollars(c.capital / s.rate / s.usdRate) : '$ —'}</span>
+          </div>
         </div>
         <div className="tiles bf-tiles">
           <div className="tile">
@@ -45,9 +48,14 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
             <span>Debes</span>
           </div>
           <button type="button" className="tile bf-rate" onClick={() => setRate(true)}>
-            <b>{s.rate}</b>
+            <span className="bf-rate-line">
+              <b>{s.rate}</b> Bs = 1 S/
+            </span>
+            <span className="bf-rate-line">
+              <b>{s.usdRate ?? '—'}</b> S/ = 1 $
+            </span>
             <span>
-              Bs por 1 sol · <u>cambiar</u>
+              <u>{s.usdRate ? 'cambiar' : 'poner el dólar'}</u>
             </span>
           </button>
         </div>
@@ -115,7 +123,7 @@ function RateForm({ rate, usd, onDone }: { rate: number; usd?: number; onDone: (
       }}
     >
       <AmountField value={v} onChange={setV} label="Cuántos Bs vale 1 sol" autoFocus />
-      <AmountField value={u} onChange={setU} label="Cuántos soles vale 1 dólar (opcional)" placeholder="Vacío: sin columna en dólares" />
+      <AmountField value={u} onChange={setU} label="Cuántos soles vale 1 dólar" placeholder="Por ejemplo 3,40" />
       <p className="fine">Cambia cuando quieras. Cada vez que cierras tu día, la foto de tu capital guarda el de ese día.</p>
       <button type="submit" className="btn primary" disabled={!n}>
         Guardar

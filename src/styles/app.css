@@ -3259,3 +3259,21 @@ dialog.bf-sheet {
 .bf-hist tr:last-child td {
   border-bottom: 0;
 }
+.bf-cap-other {
+  display: flex;
+  gap: 14px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.bf-rate .bf-rate-line {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+}
+.bf-rate .bf-rate-line b {
+  display: inline;
+  font-size: 19px;
+  color: var(--text);
+}

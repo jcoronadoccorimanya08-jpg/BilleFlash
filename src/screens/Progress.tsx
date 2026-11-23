@@ -6,7 +6,7 @@ import { PatternPad } from '../components/PatternPad';
 import { ScreenHeader, SectionTitle } from '../components/ui';
 import { canShareFiles, downloadBackupText, parseFile, serializeBackup, shareBackupText } from '../lib/backup';
 import { diffDays, localDateOf, type ISODate } from '../lib/dates';
-import { bestStreak, money, mountain, parseAmount, streak } from '../lib/engine';
+import { bestStreak, money, mountain, parseAmount, streak, dollars } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { ACCENTS, THEMES } from '../lib/look';
 import { actions, biometricSupport, changePattern, currentBackup, disableBiometric, enableBiometric, openBackup, replaceState, verifyPattern } from '../lib/store';
@@ -22,6 +22,9 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
   const rows = shots.map((s, i) => ({ s, n: i + 1, diff: i > 0 ? s.capital - shots[i - 1]!.capital : null })).reverse();
   const shown = all ? rows : rows.slice(0, 10);
   const pen = (s: CapitalShot) => s.capital / s.rate;
+  // En dólares: con el tipo de esa foto o, si no tenía, con el de hoy.
+  const usdRate = state.settings.usdRate;
+  const usd = (s: CapitalShot) => (s.usd ?? usdRate ? dollars(pen(s) / (s.usd ?? usdRate)!) : '—');
   const total = first && last ? last.capital - first.capital : 0;
   // Línea simple del capital (en Bs), de la primera foto a la última.
   const W = 320;
@@ -42,7 +45,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
                 <b>{money(last.capital)}</b>
                 <small className="muted">
                   {money(pen(last), 'PEN')}
-                  {last.usd ? ` · $ ${(pen(last) / last.usd).toFixed(2)}` : ''}
+                  {` · ${usd(last)}`}
                 </small>
               </div>
               {shots.length > 1 && (
@@ -85,7 +88,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
                 <th>Hora</th>
                 <th>Capital Bs</th>
                 <th>Capital S/</th>
-                {shots.some((s) => s.usd) && <th>En $</th>}
+                <th>Capital $</th>
                 <th>Cambio</th>
                 <th>En mano</th>
                 <th>Te deben</th>
@@ -103,7 +106,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
                     <b>{money(s.capital)}</b>
                   </td>
                   <td>{money(pen(s), 'PEN')}</td>
-                  {shots.some((x) => x.usd) && <td>{s.usd ? `$ ${(pen(s) / s.usd).toFixed(2)}` : '—'}</td>}
+                  <td>{usd(s)}</td>
                   <td className={diff === null ? 'muted' : diff >= 0 ? 'ok' : 'over'}>{diff === null ? 'inicio' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}`}</td>
                   <td>{money(s.enMano)}</td>
                   <td>{money(s.meDeben)}</td>

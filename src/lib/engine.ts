@@ -281,6 +281,11 @@ export function alerts(state: AppState, today: ISODate): Alert[] {
 
 const nf = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+/** «$ 243,10». */
+export function dollars(n: number): string {
+  return `$ ${nf.format(round2(n))}`;
+}
+
 export function money(n: number, currency: Currency = 'BOB'): string {
   return `${currency === 'PEN' ? 'S/' : 'Bs'} ${nf.format(round2(n))}`;
 }

@@ -4,12 +4,14 @@
  * widget: racha, montaña, gastado/límite, lo que queda de la quincena y lo urgente. En modo discreto, sin montos.
  */
 import { useSyncExternalStore } from 'react';
-import { addDays, appDay, type ISODate } from './dates';
+import { addDays, appDay, diffDays, type ISODate } from './dates';
 import { alerts, dayStatus, mountain, quincenaStatus, spentOn, streak } from './engine';
 import type { Accent, AppState } from './types';
 
 export interface WidgetFrame {
   today: ISODate;
+  /** Día desde que empezaste (1 = el primero; 0 = todavía no empiezas). */
+  dayNumber: number;
   streak: number;
   /** Ya cerraste hoy y con qué porcentaje (null si todavía no). */
   closedPct: number | null;
@@ -45,6 +47,7 @@ export function buildWidgetFrame(state: AppState, now: Date): WidgetFrame {
   const first = alerts(state, today)[0];
   return {
     today,
+    dayNumber: today < state.settings.startDate ? 0 : diffDays(state.settings.startDate, today) + 1,
     streak: streak(state, now),
     closedPct: st.kind === 'closed' ? st.pct : null,
     days: mountain(state, now).map((m) => ({ d: m.date, p: m.pct, w: m.closed })),
