@@ -12,6 +12,17 @@ export function toBs(amount: number, currency: Currency, rate: number): number {
   return currency === 'PEN' ? amount * rate : amount;
 }
 
+export function mainOf(state: AppState): Currency {
+  return state.settings.mainCurrency ?? 'BOB';
+}
+
+/** Un monto en tu moneda principal (con tu tipo de cambio: Bs por 1 sol). */
+export function toMain(state: AppState, amount: number, currency: Currency): number {
+  const main = mainOf(state);
+  if (currency === main) return amount;
+  return currency === 'PEN' ? amount * state.settings.rate : amount / state.settings.rate;
+}
+
 export function accountOf(state: AppState, id: string | undefined): Account | undefined {
   return state.accounts.find((a) => a.id === id);
 }
@@ -19,7 +30,7 @@ export function accountOf(state: AppState, id: string | undefined): Account | un
 /** Un gasto, en Bs. */
 function expenseBs(state: AppState, amount: number, accountId: string): number {
   const acc = accountOf(state, accountId);
-  return toBs(amount, acc?.currency ?? 'BOB', state.settings.rate);
+  return toMain(state, amount, acc?.currency ?? 'BOB');
 }
 
 export function spentOn(state: AppState, day: ISODate): number {
@@ -130,6 +141,11 @@ export interface QuincenaStatus {
 
 export function quincenaStatus(state: AppState, today: ISODate): QuincenaStatus {
   const s = state.settings;
+  if (s.incomeMode === 'libre') {
+    // Sin fecha fija: tu límite es el que elegiste; disponible es lo que tienes fuera del ahorro.
+    const free = state.accounts.filter((a) => a.kind !== 'ahorro').reduce((sum, a) => sum + toMain(state, a.balance, a.currency), 0);
+    return { q: null, budget: 0, carry: 0, spent: spentOn(state, today), available: round2(free), limit: round2(s.dailyLimit ?? 0), nextIn: null, dayIndex: 0 };
+  }
   const list = quincenas(state).filter((q) => q.date <= today);
   const defaultLimit = s.quincena.days > 0 ? round2((s.quincena.amount - s.quincena.saving) / s.quincena.days) : 0;
   if (!list.length) return { q: null, budget: 0, carry: s.carryStart, spent: 0, available: s.carryStart, limit: defaultLimit, nextIn: null, dayIndex: 0 };
@@ -177,17 +193,27 @@ export interface Capital {
 /** Tu fórmula de siempre: lo que tienes + lo que te deben − lo que debes. Todo en Bs. */
 export function capital(state: AppState): Capital {
   const r = state.settings.rate;
-  const enMano = state.accounts.reduce((s, a) => s + toBs(a.balance, a.currency, r), 0);
-  const ahorro = state.accounts.filter((a) => a.kind === 'ahorro').reduce((s, a) => s + toBs(a.balance, a.currency, r), 0);
-  const meDeben = state.debts.filter((d) => d.dir === 'me-deben').reduce((s, d) => s + toBs(debtLeft(d), d.currency, r), 0);
-  const debo = state.debts.filter((d) => d.dir === 'debo').reduce((s, d) => s + toBs(debtLeft(d), d.currency, r), 0);
+  void r;
+  const enMano = state.accounts.reduce((s, a) => s + toMain(state, a.balance, a.currency), 0);
+  const ahorro = state.accounts.filter((a) => a.kind === 'ahorro').reduce((s, a) => s + toMain(state, a.balance, a.currency), 0);
+  const meDeben = state.debts.filter((d) => d.dir === 'me-deben').reduce((s, d) => s + toMain(state, debtLeft(d), d.currency), 0);
+  const debo = state.debts.filter((d) => d.dir === 'debo').reduce((s, d) => s + toMain(state, debtLeft(d), d.currency), 0);
   return { enMano: round2(enMano), ahorro: round2(ahorro), meDeben: round2(meDeben), debo: round2(debo), capital: round2(enMano + meDeben - debo) };
+}
+
+/** Una foto del capital en Bs y en soles, sin importar en qué moneda se guardó. */
+export function shotBs(s: CapitalShot): number {
+  return s.cur === 'PEN' ? s.capital * s.rate : s.capital;
+}
+export function shotPen(s: CapitalShot): number {
+  return s.cur === 'PEN' ? s.capital : s.capital / s.rate;
 }
 
 export function shotOf(state: AppState, date: ISODate, time: string): CapitalShot {
   const c = capital(state);
   const usd = state.settings.usdRate;
-  return { date, time, rate: state.settings.rate, ...(usd ? { usd } : {}), enMano: c.enMano, meDeben: c.meDeben, debo: c.debo, capital: c.capital };
+  const cur = mainOf(state);
+  return { date, time, rate: state.settings.rate, ...(cur !== 'BOB' ? { cur } : {}), ...(usd ? { usd } : {}), enMano: c.enMano, meDeben: c.meDeben, debo: c.debo, capital: c.capital };
 }
 
 // ---------- Cuotas de deudas ----------
@@ -286,7 +312,14 @@ export function dollars(n: number): string {
   return `$ ${nf.format(round2(n))}`;
 }
 
-export function money(n: number, currency: Currency = 'BOB'): string {
+let MAIN: Currency = 'BOB';
+
+/** La moneda que usa money() cuando no se le dice cuál (la principal de la app abierta). */
+export function setMainCurrency(c: Currency): void {
+  MAIN = c;
+}
+
+export function money(n: number, currency: Currency = MAIN): string {
   return `${currency === 'PEN' ? 'S/' : 'Bs'} ${nf.format(round2(n))}`;
 }
 
@@ -455,7 +488,8 @@ export function allocateSaving(goals: Goal[], saving: number, today: ISODate, da
 /** Lo que tienes en tu cuenta de ahorro y todavía no es de ninguna meta (Bs). */
 export function unassignedSaving(state: AppState): number {
   const r = state.settings.rate;
-  const total = state.accounts.filter((a) => a.kind === 'ahorro').reduce((s, a) => s + toBs(a.balance, a.currency, r), 0);
+  void r;
+  const total = state.accounts.filter((a) => a.kind === 'ahorro').reduce((s, a) => s + toMain(state, a.balance, a.currency), 0);
   return round2(total - state.goals.reduce((s, g) => s + g.saved, 0));
 }
 
@@ -517,4 +551,56 @@ export function quincenaSummaries(state: AppState, today: ISODate, now: Date): Q
       };
     })
     .reverse();
+}
+
+// ---------- Alcancía (tu ahorro, moneda por moneda) ----------
+
+export interface PiggyMove {
+  date: ISODate;
+  time: string;
+  /** En tu moneda principal. */
+  amount: number;
+  /** «Metiste», «Ahorro automático» o «Sacaste». */
+  what: string;
+}
+
+/** Cada vez que entró (o salió) plata de tu ahorro: lo que metiste a mano y lo que se apartó solo. */
+export function piggyMoves(state: AppState): PiggyMove[] {
+  const sid = state.settings.savingAccountId;
+  if (!sid) return [];
+  const acc = state.accounts.find((a) => a.id === sid);
+  const cur = acc?.currency ?? 'BOB';
+  const out: PiggyMove[] = [];
+  for (const t of state.transfers) {
+    if (t.to === sid && t.from !== sid) out.push({ date: t.date, time: t.time, amount: round2(toMain(state, t.received, cur)), what: 'Metiste' });
+    if (t.from === sid && t.to !== sid) out.push({ date: t.date, time: t.time, amount: -round2(toMain(state, t.amount, cur)), what: 'Sacaste' });
+  }
+  for (const i of state.incomes) {
+    const n = i.quincena?.saving ?? i.kept?.saving ?? 0;
+    if (n > 0 && i.accountId !== sid) out.push({ date: i.date, time: i.time, amount: n, what: 'Ahorro automático' });
+  }
+  return out.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+}
+
+export interface PiggyStats {
+  total: number;
+  week: number;
+  month: number;
+  /** Días seguidos metiendo algo (hoy sin depósito todavía no corta). */
+  streak: number;
+}
+
+export function piggyStats(state: AppState, today: ISODate): PiggyStats {
+  const moves = piggyMoves(state).filter((m) => m.date <= today);
+  const sum = (from: ISODate) => round2(moves.filter((m) => m.date >= from).reduce((s, m) => s + m.amount, 0));
+  const days = new Set(moves.filter((m) => m.amount > 0).map((m) => m.date));
+  let d = days.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+  while (days.has(d)) {
+    streak++;
+    d = addDays(d, -1);
+  }
+  const sid = state.settings.savingAccountId;
+  const acc = state.accounts.find((a) => a.id === sid);
+  return { total: acc ? round2(toMain(state, acc.balance, acc.currency)) : 0, week: sum(addDays(today, -6)), month: sum(`${today.slice(0, 7)}-01`), streak };
 }

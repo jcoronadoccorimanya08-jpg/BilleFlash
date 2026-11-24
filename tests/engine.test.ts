@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { appDay, addMonths } from '../src/lib/dates';
-import { alerts, allocateSaving, antojosLeft, billStatus, capital, collectMessage, dailyBars, dayStatus, favorites, goalPerQuincena, guessCategory, nextInstallment, parseAmount, quincenaStatus, quincenaSummaries, spentOn, streak, unassignedSaving } from '../src/lib/engine';
+import { piggyMoves, piggyStats, alerts, allocateSaving, antojosLeft, billStatus, capital, collectMessage, dailyBars, dayStatus, favorites, goalPerQuincena, guessCategory, nextInstallment, parseAmount, quincenaStatus, quincenaSummaries, spentOn, streak, unassignedSaving } from '../src/lib/engine';
 import type { AppState, Bill, Debt, Expense, Goal } from '../src/lib/types';
 import { buildWidgetFrame } from '../src/lib/widget';
+import { buildSummary, openTeamFile, peekTeamFile, sealForTeam } from '../src/lib/coach';
 
 /** La Paz es UTC−4: las 20:00 de La Paz son las 00:00Z del día siguiente. */
 const lp = (date: string, hhmm: string) => {
@@ -29,6 +30,7 @@ function base(): AppState {
     bills: [],
     shots: [],
     goals: [],
+    team: [],
   };
 }
 const exp = (date: string, amount: number, extra: Partial<Expense> = {}): Expense => ({ id: `${date}-${amount}-${Math.random()}`, date, time: '12:00', desc: 'x', amount, accountId: 'monedas', ...extra });
@@ -222,5 +224,59 @@ describe('widget', () => {
     const hidden = buildWidgetFrame({ ...s, settings: { ...s.settings, discreet: true } }, lp('2026-11-23', '20:00'));
     expect(hidden).toMatchObject({ spent: null, limit: null, available: null, antojos: null, goal: { pct: 25, name: null, saved: null, target: null } });
     expect(JSON.stringify(hidden)).not.toContain('Meta privada');
+  });
+});
+
+describe('plata sin fecha fija, en soles, con alcancía', () => {
+  function naomi(): AppState {
+    const s = base();
+    s.settings = { ...s.settings, mainCurrency: 'PEN', incomeMode: 'libre', dailyLimit: 3, savingPct: 10, savingAccountId: 'alcancia' };
+    s.accounts = [
+      { id: 'efectivo', name: 'Efectivo', currency: 'PEN', kind: 'efectivo', balance: 4 },
+      { id: 'alcancia', name: 'Alcancía', currency: 'PEN', kind: 'ahorro', balance: 0 },
+    ];
+    return s;
+  }
+  it('el límite es el que elegiste y lo disponible es lo que tienes fuera de la alcancía', () => {
+    const s = naomi();
+    s.expenses.push(exp('2026-11-23', 2, { accountId: 'efectivo' }));
+    const q = quincenaStatus(s, '2026-11-23');
+    expect(q).toMatchObject({ limit: 3, available: 4, q: null, nextIn: null });
+    expect(spentOn(s, '2026-11-23')).toBe(2);
+  });
+  it('un gasto en Bs cuenta en soles con tu tipo de cambio', () => {
+    const s = naomi();
+    s.accounts.push({ id: 'bs', name: 'Bs', currency: 'BOB', kind: 'efectivo', balance: 0 });
+    s.expenses.push(exp('2026-11-23', 6.9, { accountId: 'bs' }));
+    expect(spentOn(s, '2026-11-23')).toBe(2);
+  });
+  it('la alcancía suma cada moneda: semana, mes y días seguidos', () => {
+    const s = naomi();
+    s.accounts[1]!.balance = 9;
+    s.transfers = [
+      { id: 'a', date: '2026-11-21', time: '17:00', from: 'efectivo', to: 'alcancia', amount: 2, received: 2 },
+      { id: 'b', date: '2026-11-22', time: '17:00', from: 'efectivo', to: 'alcancia', amount: 5, received: 5 },
+      { id: 'c', date: '2026-11-23', time: '17:00', from: 'efectivo', to: 'alcancia', amount: 1, received: 1 },
+      { id: 'd', date: '2026-10-30', time: '17:00', from: 'efectivo', to: 'alcancia', amount: 1, received: 1 },
+    ];
+    s.incomes = [{ id: 'i', date: '2026-11-23', time: '16:00', desc: 'Propina', amount: 7, accountId: 'efectivo', kept: { saving: 0.7 } }];
+    expect(piggyStats(s, '2026-11-23')).toEqual({ total: 9, week: 8.7, month: 8.7, streak: 3 });
+    expect(piggyMoves(s)[0]).toMatchObject({ what: 'Metiste', amount: 1 });
+  });
+});
+
+describe('modo entrenador', () => {
+  it('el resumen viaja cifrado y solo se abre con el código del equipo', async () => {
+    const s = base();
+    s.settings.nick = 'Prueba';
+    s.expenses.push(exp('2026-11-23', 25, { desc: 'Almuerzo' }));
+    const sum = buildSummary(s, lp('2026-11-23', '18:00'));
+    expect(sum.expenses[0]).toMatchObject({ desc: 'Almuerzo', a: 25, cat: 'comida' });
+    const text = await sealForTeam('coach-summary', sum, 'nuestro código');
+    expect(text).not.toContain('Almuerzo');
+    expect(peekTeamFile(text)).toBe('coach-summary');
+    expect(await openTeamFile(text, 'otro')).toBeNull();
+    const back = await openTeamFile(text, ' nuestro código ');
+    expect((back?.data as { name: string }).name).toBe('Prueba');
   });
 });

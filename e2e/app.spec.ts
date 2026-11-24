@@ -157,12 +157,12 @@ test('metas de ahorro: la quincena reparte el ahorro y los favoritos anotan de u
   await nav(page, 'Cuentas');
   await page.getByRole('button', { name: 'Nueva meta' }).click();
   await page.getByLabel('Para qué').fill('Fondo');
-  await page.getByLabel('Cuánto quieres juntar (Bs)').fill('100');
+  await page.getByLabel('Cuánto quieres juntar').fill('100');
   await page.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
   await expect(page.locator('.bf-goal')).toContainText('⭐ Fondo');
   await page.getByRole('button', { name: 'Avance' }).click();
   await page.getByLabel('Cuánto va al ahorro (Bs)').fill('30');
-  await page.getByRole('button', { name: 'Guardar' }).first().click();
+  await page.locator('section', { has: page.getByLabel('Cuánto va al ahorro (Bs)') }).getByRole('button', { name: 'Guardar' }).click();
   await nav(page, 'Hoy');
   await page.getByRole('button', { name: 'Entró plata' }).click();
   await page.getByLabel('Monto (Bs)').fill('300');
@@ -182,4 +182,63 @@ test('metas de ahorro: la quincena reparte el ahorro y los favoritos anotan de u
   await expect(page.getByRole('row').filter({ hasText: 'Pasaje' }).first()).toContainText('Pasaje · Monedas');
   await nav(page, 'Avance');
   await expect(page.locator('.bf-cat-row').filter({ hasText: 'Pasaje' })).toContainText('Bs 9');
+});
+
+test('modo hermana: soles, «me dieron» con 10 % a la alcancía, monedas y resumen cifrado para el entrenador', async ({ page }) => {
+  await page.clock.install({ time: NIGHT });
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Pegar el texto del archivo o de un respaldo' }).click();
+  await page.getByPlaceholder('Pega aquí todo el texto').fill(
+    JSON.stringify({
+      app: 'billeflash',
+      kind: 'config',
+      nick: 'Ana',
+      mainCurrency: 'PEN',
+      incomeMode: 'libre',
+      dailyLimit: 3,
+      savingPct: 10,
+      accent: 'vino',
+      remindAt: '22:00',
+      accounts: [
+        { id: 'efectivo', name: 'Mi plata', currency: 'PEN', kind: 'efectivo', balance: 0 },
+        { id: 'alcancia', name: 'Alcancía', currency: 'PEN', kind: 'ahorro', balance: 0 },
+      ],
+      goals: [{ name: 'Cursos', target: 300, saved: 0, main: true }],
+    }),
+  );
+  await page.getByRole('button', { name: 'Abrir' }).click();
+  await createPattern(page);
+  await expect(page.getByRole('heading', { name: 'Hola, Ana' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'vino');
+  await expect(page.locator('.bf-limit')).toContainText('S/ 3');
+
+  await page.getByRole('button', { name: 'Me dieron plata' }).click();
+  await page.getByLabel('Monto (S/)').fill('7');
+  await expect(page.getByText('Apartar 10 % a mi alcancía (S/ 0,7)')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar' }).click();
+  await page.getByRole('button', { name: '+ S/ 2' }).click();
+  await expect(page.locator('.bf-piggy b')).toHaveText('S/ 2,7');
+  await page.getByLabel('Descripción').fill('Raspadilla');
+  await page.getByLabel('Costo').fill('1,5');
+  await page.getByRole('button', { name: 'Agregar gasto' }).click();
+
+  // Su resumen, cifrado con el código del equipo.
+  await nav(page, 'Avance');
+  await page.getByLabel('Código de equipo (el mismo que tu entrenador)').fill('codigo secreto');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Mandar mi resumen a mi entrenador' }).click()]);
+  const text = await (await import('node:fs/promises')).readFile((await dl.path())!, 'utf-8');
+  expect(text).not.toContain('Raspadilla');
+
+  // El entrenador lo abre en su equipo (aquí, en la misma app, para la prueba).
+  await page.getByRole('button', { name: 'Agregar a mi equipo' }).click();
+  await page.getByLabel('Nombre').fill('Ana');
+  await page.getByLabel('Código de equipo (el mismo que ella puso)').fill('codigo secreto');
+  await page.getByRole('dialog').getByRole('button', { name: 'Agregar' }).click();
+  const member = page.locator('.bf-member');
+  await member.getByRole('button', { name: 'Pegar texto' }).click();
+  await member.getByPlaceholder('Pega aquí el texto del resumen').fill(text);
+  await member.getByRole('button', { name: 'Abrir', exact: true }).click();
+  await expect(member).toContainText('Raspadilla');
+  await expect(member).toContainText('🐷 S/ 2,7');
+  await expect(member).toContainText('Cursos: S/ 2,7 de S/ 300');
 });

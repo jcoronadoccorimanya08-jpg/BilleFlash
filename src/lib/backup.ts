@@ -5,7 +5,8 @@
 import { todayISO } from './dates';
 import { isWrapped } from './crypto';
 import { DEFAULT_RATE } from './config';
-import { sanitizeAccounts, sanitizeBills, sanitizeDebts } from './sanitize';
+import { sanitizeAccounts, sanitizeBills, sanitizeDebts, sanitizeGoals } from './sanitize';
+import { isAccent } from './look';
 import type { StartData } from './store';
 import type { VaultRecord } from './vault';
 
@@ -75,13 +76,18 @@ export function parseFile(text: string): ParsedFile {
       quincena: { amount: Math.max(0, num(q.amount) ?? 0), saving: Math.max(0, num(q.saving) ?? 0), days: Math.max(1, Math.round(num(q.days) ?? 15)) },
       carryStart: num(o.carryStart) ?? 0,
       ...(typeof o.nick === 'string' && o.nick.trim() ? { nick: o.nick.trim().slice(0, 24) } : {}),
+      goals: sanitizeGoals(o.goals),
+      ...(o.mainCurrency === 'PEN' ? { mainCurrency: 'PEN' as const } : {}),
+      ...(o.incomeMode === 'libre' ? { incomeMode: 'libre' as const, dailyLimit: Math.max(0, num(o.dailyLimit) ?? 0), savingPct: Math.min(100, Math.max(0, num(o.savingPct) ?? 10)) } : {}),
+      ...(isAccent(o.accent) ? { accent: o.accent } : {}),
+      ...(typeof o.remindAt === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(o.remindAt) ? { remindAt: o.remindAt } : {}),
     };
   }
   throw new Error('Tipo de archivo desconocido.');
 }
 
-function textFile(text: string): File {
-  return new File([text], backupFileName(), { type: 'text/plain' });
+function textFile(text: string, name = backupFileName()): File {
+  return new File([text], name, { type: 'text/plain' });
 }
 
 export function canShareFiles(): boolean {
@@ -92,9 +98,9 @@ export function canShareFiles(): boolean {
   }
 }
 
-export async function shareBackupText(text: string): Promise<'shared' | 'cancelled'> {
+export async function shareBackupText(text: string, name?: string): Promise<'shared' | 'cancelled'> {
   try {
-    await navigator.share({ files: [textFile(text)], title: 'Respaldo' });
+    await navigator.share({ files: [textFile(text, name)], title: name ? 'BilleFlash' : 'Respaldo' });
     return 'shared';
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled';
@@ -102,11 +108,11 @@ export async function shareBackupText(text: string): Promise<'shared' | 'cancell
   }
 }
 
-export function downloadBackupText(text: string): void {
+export function downloadBackupText(text: string, name?: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = backupFileName();
+  a.download = name ?? backupFileName();
   document.body.appendChild(a);
   a.click();
   a.remove();

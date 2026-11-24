@@ -6,7 +6,7 @@ import { PatternPad } from '../components/PatternPad';
 import { parseFile, type ConfigData } from '../lib/backup';
 import { APP_NAME } from '../lib/config';
 import type { ISODate } from '../lib/dates';
-import { capital, money, parseAmount } from '../lib/engine';
+import { capital, money, parseAmount, setMainCurrency } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { createVault, initialState, openBackup, type StartData } from '../lib/store';
 import type { VaultRecord } from '../lib/vault';
@@ -30,6 +30,7 @@ export function Setup({ today, updateBanner }: { today: ISODate; updateBanner?: 
         const { kind: _k, ...cfg } = f;
         void _k;
         const data: StartData = { startDate: today, ...(cfg as ConfigData) };
+        setMainCurrency(data.mainCurrency ?? 'BOB');
         const c = capital(initialState(data));
         toast(`Archivo leído: capital ${money(c.capital)}.`, 'success');
         setStep({ kind: 'pattern', data });

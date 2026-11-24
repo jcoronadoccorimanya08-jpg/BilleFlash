@@ -31,8 +31,8 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
           <span className="muted">Tu capital</span>
           <b>{money(c.capital)}</b>
           <div className="bf-cap-other">
-            <span>{money(c.capital / s.rate, 'PEN')}</span>
-            <span>{s.usdRate ? dollars(c.capital / s.rate / s.usdRate) : '$ —'}</span>
+            {s.mainCurrency === 'PEN' ? <span>{money(c.capital * s.rate, 'BOB')}</span> : <span>{money(c.capital / s.rate, 'PEN')}</span>}
+            <span>{s.usdRate ? dollars((s.mainCurrency === 'PEN' ? c.capital : c.capital / s.rate) / s.usdRate) : '$ —'}</span>
           </div>
         </div>
         <div className="tiles bf-tiles">

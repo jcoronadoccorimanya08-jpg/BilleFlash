@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { AccountSelect, AmountField } from './bf';
 import { Icon } from './Icon';
 import { ConfirmDialog, SectionTitle, Sheet } from './ui';
+import { CURRENCY_SIGN } from '../lib/config';
 import { formatShort, type ISODate } from '../lib/dates';
-import { goalLeft, goalPerQuincena, money, parseAmount, unassignedSaving } from '../lib/engine';
+import { mainOf, goalLeft, goalPerQuincena, money, parseAmount, unassignedSaving } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { actions } from '../lib/store';
 import type { AppState, Goal } from '../lib/types';
@@ -116,7 +117,7 @@ function MoveGoal({ state, initial, label, noneLabel, confirm, onDone }: { state
         if (n) onDone(n, acc || undefined);
       }}
     >
-      <AmountField value={v} onChange={setV} label="Monto (Bs)" autoFocus />
+      <AmountField value={v} onChange={setV} label={`Monto (${CURRENCY_SIGN[mainOf(state)]})`} autoFocus />
       <AccountSelect state={state} value={acc} onChange={setAcc} label={label} allowNone noneLabel={noneLabel} />
       <button type="submit" className="btn primary" disabled={!n}>
         {confirm}
@@ -149,7 +150,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone: () => void }) {
         <span>Para qué</span>
         <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Fondo de emergencia, pagar…, comprar…" autoFocus />
       </label>
-      <AmountField value={target} onChange={setTarget} label="Cuánto quieres juntar (Bs)" />
+      <AmountField value={target} onChange={setTarget} label="Cuánto quieres juntar" />
       <label className="bf-check">
         <input type="checkbox" checked={hasDate} onChange={(e) => setHasDate(e.target.checked)} />
         <span>Con fecha (la app te dice cuánto apartar cada quincena)</span>

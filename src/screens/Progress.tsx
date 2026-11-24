@@ -3,11 +3,12 @@ import { AccountSelect, AmountField } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { CapitalCurve, CategoryBars, DayBars } from '../components/Charts';
 import { Mountain } from '../components/Mountain';
+import { MyCoach, MyTeam } from '../components/Team';
 import { PatternPad } from '../components/PatternPad';
 import { ScreenHeader, SectionTitle } from '../components/ui';
 import { canShareFiles, downloadBackupText, parseFile, serializeBackup, shareBackupText } from '../lib/backup';
 import { addDays, diffDays, formatShort, localDateOf, type ISODate } from '../lib/dates';
-import { bestStreak, dailyBars, dollars, money, mountain, parseAmount, quincenaSummaries, spentByCategory, streak } from '../lib/engine';
+import { shotBs, shotPen, bestStreak, dailyBars, dollars, money, mountain, parseAmount, quincenaSummaries, spentByCategory, streak } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { ACCENTS, THEMES } from '../lib/look';
 import { actions, biometricSupport, changePattern, currentBackup, disableBiometric, enableBiometric, openBackup, replaceState, verifyPattern } from '../lib/store';
@@ -22,7 +23,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
   const last = shots[shots.length - 1];
   const rows = shots.map((s, i) => ({ s, n: i + 1, diff: i > 0 ? s.capital - shots[i - 1]!.capital : null })).reverse();
   const shown = all ? rows : rows.slice(0, 10);
-  const pen = (s: CapitalShot) => s.capital / s.rate;
+  const pen = (s: CapitalShot) => shotPen(s);
   // En dólares: con el tipo de esa foto o, si no tenía, con el de hoy.
   const usdRate = state.settings.usdRate;
   const usd = (s: CapitalShot) => (s.usd ?? usdRate ? dollars(pen(s) / (s.usd ?? usdRate)!) : '$ —');
@@ -93,7 +94,7 @@ function CapitalHistory({ state, today }: { state: AppState; today: ISODate }) {
                   <td>{s.date.slice(8, 10)}/{s.date.slice(5, 7)}/{s.date.slice(2, 4)}</td>
                   <td>{s.time}</td>
                   <td>
-                    <b>{money(s.capital)}</b>
+                    <b>{money(shotBs(s), 'BOB')}</b>
                   </td>
                   <td>{money(pen(s), 'PEN')}</td>
                   <td>{usd(s)}</td>
@@ -206,8 +207,69 @@ export function ProgressScreen({ state, today, now, hasBio }: { state: AppState;
 
       <CapitalHistory state={state} today={today} />
 
+      <MyCoach state={state} now={now} />
+
+      <MyTeam state={state} today={today} />
+
       <Settings state={state} today={today} hasBio={hasBio} />
     </main>
+  );
+}
+
+/** Mi plata: moneda principal, cómo te llega (quincena o libre), límite, % al ahorro y la hora del aviso. */
+function MoneyPrefs({ state }: { state: AppState }) {
+  const s = state.settings;
+  const [cur, setCur] = useState(s.mainCurrency ?? 'BOB');
+  const [mode, setMode] = useState(s.incomeMode ?? 'quincena');
+  const [limit, setLimit] = useState(String(s.dailyLimit ?? ''));
+  const [pct, setPct] = useState(String(s.savingPct ?? 10));
+  const [at, setAt] = useState(s.remindAt ?? '22:30');
+  return (
+    <>
+      <SectionTitle>Mi plata</SectionTitle>
+      <section className="card stack">
+        <div className="segmented" role="radiogroup" aria-label="Moneda principal">
+          {(
+            [
+              ['BOB', 'Bolivianos'],
+              ['PEN', 'Soles'],
+            ] as const
+          ).map(([c, l]) => (
+            <button key={c} type="button" role="radio" aria-checked={cur === c} onClick={() => setCur(c)}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div className="segmented" role="radiogroup" aria-label="Cómo te llega la plata">
+          <button type="button" role="radio" aria-checked={mode === 'quincena'} onClick={() => setMode('quincena')}>
+            Quincena fija
+          </button>
+          <button type="button" role="radio" aria-checked={mode === 'libre'} onClick={() => setMode('libre')}>
+            Cuando me dan
+          </button>
+        </div>
+        {mode === 'libre' && (
+          <>
+            <AmountField value={limit} onChange={setLimit} label={`Mi límite de cada día (${cur === 'PEN' ? 'S/' : 'Bs'})`} />
+            <AmountField value={pct} onChange={setPct} label="% de cada plata que va solo a mi alcancía" />
+          </>
+        )}
+        <label className="lbl-field">
+          <span>Hora del aviso de la noche (en el widget)</span>
+          <input className="field" type="time" value={at} onChange={(e) => setAt(e.target.value || at)} />
+        </label>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            actions.setMoneyPrefs({ mainCurrency: cur, incomeMode: mode, dailyLimit: parseAmount(limit) ?? 0, savingPct: Math.min(100, Math.max(0, Number(pct.replace(',', '.')) || 0)), remindAt: at });
+            toast('Guardado.', 'success');
+          }}
+        >
+          Guardar
+        </button>
+      </section>
+    </>
   );
 }
 
@@ -260,15 +322,19 @@ function Settings({ state, today, hasBio }: { state: AppState; today: ISODate; h
   const qs = qSaving.trim() === '' ? 0 : (parseAmount(qSaving) ?? 0);
   const qd = Math.max(1, Math.round(Number(qDays) || 15));
 
+  const sign = s.mainCurrency === 'PEN' ? 'S/' : 'Bs';
   return (
     <>
+      <MoneyPrefs state={state} />
+      {s.incomeMode !== 'libre' && (
+        <>
       <SectionTitle>Mi quincena</SectionTitle>
       <section className="card stack">
-        <AmountField value={qAmount} onChange={setQAmount} label="Cuánto llega (Bs)" />
-        <AmountField value={qSaving} onChange={setQSaving} label="Cuánto va al ahorro (Bs)" />
+        <AmountField value={qAmount} onChange={setQAmount} label={`Cuánto llega (${sign})`} />
+        <AmountField value={qSaving} onChange={setQSaving} label={`Cuánto va al ahorro (${sign})`} />
         <AmountField value={qDays} onChange={setQDays} label="Días que dura" />
         <p className="fine">Tu límite: {money(qd ? (qa - qs) / qd : 0)} por día.</p>
-        <AmountField value={carry} onChange={setCarry} label="Lo que te sobró antes de empezar (Bs)" />
+        <AmountField value={carry} onChange={setCarry} label={`Lo que te sobró antes de empezar (${sign})`} />
         <AccountSelect state={state} value={s.savingAccountId ?? ''} onChange={(id) => actions.setSavingAccount(id)} label="Cuenta de ahorro" />
         <button
           type="button"
@@ -282,6 +348,8 @@ function Settings({ state, today, hasBio }: { state: AppState; today: ISODate; h
           Guardar
         </button>
       </section>
+        </>
+      )}
 
       <SectionTitle>Widget y frases</SectionTitle>
       <section className="card stack">

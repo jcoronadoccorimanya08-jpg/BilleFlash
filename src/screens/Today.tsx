@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { celebrate } from '../components/Confetti';
 import { AccountSelect, AmountField, Money } from '../components/bf';
 import { Icon } from '../components/Icon';
+import { PiggyCard } from '../components/Piggy';
 import { ConfirmDialog, ScreenHeader, Sheet } from '../components/ui';
-import { CLOSE_PHRASES } from '../lib/config';
+import { CLOSE_PHRASES, CURRENCY_SIGN } from '../lib/config';
 import { clockOf, diffDays, formatLong, localDateOf, type ISODate } from '../lib/dates';
-import { accountOf, alerts, antojosLeft, canClose, CATEGORIES, categoryInfo, categoryOf, dayStatus, favorites, guessCategory, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
+import { accountOf, alerts, antojosLeft, mainOf, canClose, CATEGORIES, categoryInfo, categoryOf, dayStatus, favorites, guessCategory, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
 import { haptic, toast } from '../lib/feedback';
 import { actions } from '../lib/store';
 import type { AppState, Category, Expense } from '../lib/types';
@@ -93,6 +94,15 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
         </div>
       )}
 
+      {s.coachNote && (
+        <div className="bf-alert bf-note" role="note">
+          <span>💬 Tu entrenador: {s.coachNote.text}</span>
+          <button type="button" className="btn sm" onClick={() => actions.setCoachNote(null)}>
+            Listo
+          </button>
+        </div>
+      )}
+
       <section className="card bf-limit">
         <div className="bf-limit-top">
           <div>
@@ -110,9 +120,11 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
         <p className="fine">
           {within ? `Te quedan ${money(Math.max(0, q.limit - spent))} hoy.` : `Te pasaste ${money(spent - q.limit)}. Sin culpa: mañana lo equilibras.`}
           {within && q.limit > 0 && <b className="bf-anto"> Para antojos: {money(anto.left)}{anto.reserve > 0 ? ` (guardando ${money(anto.reserve)} para comer)` : ''}.</b>}
-          {q.q ? ` Disponible en la quincena: ${money(q.available)}${q.nextIn !== null ? ` · próxima ${q.nextIn > 0 ? `en ${q.nextIn} ${q.nextIn === 1 ? 'día' : 'días'}` : q.nextIn === 0 ? 'hoy' : `atrasada ${-q.nextIn} ${q.nextIn === -1 ? 'día' : 'días'}`}` : ''}.` : ' Registra tu quincena con «Entró plata».'}
+          {s.incomeMode === 'libre' ? ` Tienes ${money(q.available)} fuera de tu alcancía.` : q.q ? ` Disponible en la quincena: ${money(q.available)}${q.nextIn !== null ? ` · próxima ${q.nextIn > 0 ? `en ${q.nextIn} ${q.nextIn === 1 ? 'día' : 'días'}` : q.nextIn === 0 ? 'hoy' : `atrasada ${-q.nextIn} ${q.nextIn === -1 ? 'día' : 'días'}`}` : ''}.` : ' Registra tu quincena con «Entró plata».'}
         </p>
       </section>
+
+      <PiggyCard state={state} today={today} />
 
       <section className="card">
         <h2 className="card-title">Anotar un gasto</h2>
@@ -134,7 +146,7 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
         >
           <input className="field" placeholder="Descripción (almuerzo, pasaje…)" value={desc} onChange={(e) => setDesc(e.target.value)} enterKeyHint="next" aria-label="Descripción" />
           <div className="bf-add-row">
-            <input className="field" inputMode="decimal" placeholder="Bs 0" value={amount} onChange={(e) => setAmount(e.target.value)} enterKeyHint="done" aria-label="Costo" />
+            <input className="field" inputMode="decimal" placeholder={`${CURRENCY_SIGN[mainOf(state)]} 0`} value={amount} onChange={(e) => setAmount(e.target.value)} enterKeyHint="done" aria-label="Costo" />
             <select className="field" value={acc} onChange={(e) => setAcc(e.target.value)} aria-label="De qué cuenta">
               {state.accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -187,7 +199,7 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
 
       <div className="btn-row">
         <button type="button" className="btn" onClick={() => setIncome(true)}>
-          <Icon name="download" size={18} /> Entró plata
+          <Icon name="download" size={18} /> {s.incomeMode === 'libre' ? 'Me dieron plata' : 'Entró plata'}
         </button>
       </div>
 
@@ -223,7 +235,7 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
       <Sheet open={Boolean(edit)} title="Editar gasto" onClose={() => setEdit(null)}>
         {edit && <EditExpense state={state} e={edit} onDone={() => setEdit(null)} />}
       </Sheet>
-      <Sheet open={income} title="Entró plata" onClose={() => setIncome(false)}>
+      <Sheet open={income} title={s.incomeMode === 'libre' ? 'Me dieron plata' : 'Entró plata'} onClose={() => setIncome(false)}>
         <IncomeForm state={state} today={today} onDone={() => setIncome(false)} />
       </Sheet>
     </main>
@@ -287,23 +299,28 @@ function EditExpense({ state, e, onDone }: { state: AppState; e: Expense; onDone
 
 function IncomeForm({ state, today, onDone }: { state: AppState; today: ISODate; onDone: () => void }) {
   const qz = state.settings.quincena;
-  const [isQ, setIsQ] = useState(true);
+  const libre = state.settings.incomeMode === 'libre';
+  const pct = state.settings.savingPct ?? 0;
+  const [isQ, setIsQ] = useState(!libre);
+  const [keep, setKeep] = useState(true);
+  const sign = CURRENCY_SIGN[mainOf(state)];
   const [desc, setDesc] = useState('');
-  const [amount, setAmount] = useState(qz.amount ? String(qz.amount) : '');
+  const [amount, setAmount] = useState(!libre && qz.amount ? String(qz.amount) : '');
   const [acc, setAcc] = useState(state.accounts.find((a) => a.kind === 'banco')?.id ?? state.accounts[0]?.id ?? '');
   const n = parseAmount(amount);
-  const saving = isQ ? Math.min(n ?? 0, qz.saving) : 0;
+  const saving = isQ ? Math.min(n ?? 0, qz.saving) : libre && keep ? Math.round((n ?? 0) * pct) / 100 : 0;
   return (
     <form
       className="stack"
       onSubmit={(e) => {
         e.preventDefault();
         if (!n) return;
-        actions.addIncome(today, { desc, amount: n, accountId: acc, quincena: isQ });
-        toast(isQ ? `Quincena registrada a las ${clockOf()}. ${saving ? `${money(saving)} al ahorro.` : ''}` : 'Ingreso anotado.', 'success');
+        actions.addIncome(today, { desc: desc || (libre ? 'Me dieron' : ''), amount: n, accountId: acc, quincena: isQ, save: keep });
+        toast(isQ ? `Quincena registrada a las ${clockOf()}. ${saving ? `${money(saving)} al ahorro.` : ''}` : saving ? `Anotado. 🐷 ${money(saving)} a tu alcancía.` : 'Ingreso anotado.', 'success');
         onDone();
       }}
     >
+      {!libre && (
       <div className="segmented" role="radiogroup" aria-label="Tipo de ingreso">
         <button type="button" role="radio" aria-checked={isQ} onClick={() => setIsQ(true)}>
           Mi quincena
@@ -312,14 +329,21 @@ function IncomeForm({ state, today, onDone }: { state: AppState; today: ISODate;
           Otro ingreso
         </button>
       </div>
+      )}
       {!isQ && (
         <label className="lbl-field">
           <span>De qué</span>
-          <input className="field" placeholder="Me pagó…, vendí…" value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <input className="field" placeholder={libre ? 'Propina, pasaje, cumple…' : 'Me pagó…, vendí…'} value={desc} onChange={(e) => setDesc(e.target.value)} />
         </label>
       )}
-      <AmountField value={amount} onChange={setAmount} label="Monto (Bs)" />
+      <AmountField value={amount} onChange={setAmount} label={`Monto (${sign})`} />
       <AccountSelect state={state} value={acc} onChange={setAcc} label="A qué cuenta entró" />
+      {libre && pct > 0 && (
+        <label className="bf-check">
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
+          <span>Apartar {pct} % a mi alcancía{n ? ` (${money(saving)})` : ''}</span>
+        </label>
+      )}
       {isQ && saving > 0 && <p className="fine">Se apartan {money(saving)} a tu ahorro. Tu límite queda en {money((qz.amount - qz.saving) / qz.days)} por día.</p>}
       <button type="submit" className="btn primary" disabled={!n}>
         Registrar

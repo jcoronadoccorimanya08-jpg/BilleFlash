@@ -19,6 +19,7 @@ export const ACCENTS: [Accent, string][] = [
   ['violeta', 'Violeta'],
   ['lima', 'Lima'],
   ['rosa', 'Rosa'],
+  ['vino', 'Vino'],
 ];
 
 export interface Look {
@@ -28,7 +29,7 @@ export interface Look {
 }
 
 export const isTheme = (v: unknown): v is Theme => v === 'system' || v === 'dark' || v === 'light' || v === 'black';
-export const isAccent = (v: unknown): v is Accent => v === 'verde' || v === 'violeta' || v === 'lima' || v === 'rosa';
+export const isAccent = (v: unknown): v is Accent => v === 'verde' || v === 'violeta' || v === 'lima' || v === 'rosa' || v === 'vino';
 export const isTextSize = (v: unknown): v is TextSize => v === 'normal' || v === 'grande';
 
 export function readLook(): Look {

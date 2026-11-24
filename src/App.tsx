@@ -4,7 +4,7 @@ import { BottomNav, ToastHost, type Tab } from './components/ui';
 import { UpdateBanner, useServiceWorker } from './components/UpdateBanner';
 import { WidgetHint } from './components/WidgetHint';
 import { canShareFiles, downloadBackupText, serializeBackup, shareBackupText } from './lib/backup';
-import { alerts, billStatus, nextInstallment } from './lib/engine';
+import { alerts, billStatus, mainOf, nextInstallment, setMainCurrency } from './lib/engine';
 import { toast } from './lib/feedback';
 import { useMediaQuery, useToday } from './lib/hooks';
 import { applyLook, readLook, type Look } from './lib/look';
@@ -115,6 +115,8 @@ export function App() {
       toast('No se pudo crear el respaldo. Prueba desde Avance → Respaldo.', 'error');
     }
   };
+
+  setMainCurrency(mainOf(state));
 
   const navAlerts = {
     hoy: alerts(state, today).some((a) => a.tone === 'red'),

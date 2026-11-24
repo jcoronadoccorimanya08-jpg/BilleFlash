@@ -278,6 +278,12 @@ export interface StartData {
   bills?: Bill[];
   goals?: Goal[];
   nick?: string;
+  mainCurrency?: Currency;
+  incomeMode?: 'quincena' | 'libre';
+  dailyLimit?: number;
+  savingPct?: number;
+  accent?: Accent;
+  remindAt?: string;
 }
 
 export function initialState(o: StartData): AppState {
@@ -291,11 +297,15 @@ export function initialState(o: StartData): AppState {
     ...(saving ? { savingAccountId: saving.id } : {}),
     discreet: false,
     ...(o.nick ? { nick: o.nick } : {}),
+    ...(o.mainCurrency === 'PEN' ? { mainCurrency: 'PEN' as Currency } : {}),
+    ...(o.incomeMode === 'libre' ? { incomeMode: 'libre' as const, dailyLimit: o.dailyLimit ?? 0, savingPct: o.savingPct ?? 10 } : {}),
+    ...(o.accent && o.accent !== 'verde' ? { accent: o.accent } : {}),
+    ...(o.remindAt ? { remindAt: o.remindAt } : {}),
     theme: 'system',
     autoLockMinutes: 1,
     createdAt: new Date().toISOString(),
   };
-  const st: AppState = { schema: 1, settings, accounts, expenses: [], incomes: [], transfers: [], days: {}, debts: o.debts ?? [], bills: o.bills ?? [], shots: [], goals: o.goals ?? [] };
+  const st: AppState = { schema: 1, settings, accounts, expenses: [], incomes: [], transfers: [], days: {}, debts: o.debts ?? [], bills: o.bills ?? [], shots: [], goals: o.goals ?? [], team: [] };
   // Fila N° 1 de tu historial: cómo empiezas.
   return { ...st, shots: [shotOf(st, o.startDate, clockOf())] };
 }
@@ -371,18 +381,20 @@ export const actions = {
   },
 
   /** Entró plata. Si es la quincena, el ahorro se aparta solo a tu cuenta de ahorro. */
-  addIncome(day: ISODate, i: { desc: string; amount: number; accountId: string; quincena?: boolean }) {
+  addIncome(day: ISODate, i: { desc: string; amount: number; accountId: string; quincena?: boolean; /** Modo libre: false para no apartar nada esta vez. */ save?: boolean }) {
     update((st) => {
-      const saving = i.quincena ? Math.min(i.amount, st.settings.quincena.saving) : 0;
+      const libre = st.settings.incomeMode === 'libre' && !i.quincena && i.save !== false;
+      const saving = i.quincena ? Math.min(i.amount, st.settings.quincena.saving) : libre ? round2((i.amount * (st.settings.savingPct ?? 0)) / 100) : 0;
       const goals = saving > 0 ? allocateSaving(st.goals, saving, day, st.settings.quincena.days) : {};
-      const qz = i.quincena ? { quincena: { saving, ...(Object.keys(goals).length ? { goals } : {}) } } : {};
+      const box = { saving, ...(Object.keys(goals).length ? { goals } : {}) };
+      const qz = i.quincena ? { quincena: box } : saving > 0 ? { kept: box } : {};
       const inc = { id: newId(), date: day, time: clockOf(), desc: i.desc.trim() || (i.quincena ? 'Quincena' : 'Ingreso'), amount: round2(i.amount), accountId: i.accountId, ...qz };
       let out = move({ ...st, incomes: [...st.incomes, inc], goals: st.goals.map((g) => (goals[g.id] ? { ...g, saved: round2(g.saved + goals[g.id]!) } : g)) }, i.accountId, inc.amount);
       const sid = st.settings.savingAccountId;
       if (saving > 0 && sid && sid !== i.accountId) {
         const from = accountOf(out, i.accountId);
         const to = accountOf(out, sid);
-        if (from && to) out = move(move(out, from.id, -saving), to.id, convert(saving, 'BOB', to.currency, st.settings.rate));
+        if (from && to) out = move(move(out, from.id, -convert(saving, st.settings.mainCurrency ?? 'BOB', from.currency, st.settings.rate)), to.id, convert(saving, st.settings.mainCurrency ?? 'BOB', to.currency, st.settings.rate));
       }
       return out;
     });
@@ -392,11 +404,12 @@ export const actions = {
     update((st) => {
       const old = st.incomes.find((x) => x.id === id);
       if (!old) return st;
-      const given = old.quincena?.goals ?? {};
+      const given = old.quincena?.goals ?? old.kept?.goals ?? {};
       let out = move({ ...st, incomes: st.incomes.filter((x) => x.id !== id), goals: st.goals.map((g) => (given[g.id] ? { ...g, saved: Math.max(0, round2(g.saved - given[g.id]!)) } : g)) }, old.accountId, -old.amount);
-      const saving = old.quincena?.saving ?? 0;
+      const saving = old.quincena?.saving ?? old.kept?.saving ?? 0;
       const sid = st.settings.savingAccountId;
-      if (saving > 0 && sid && sid !== old.accountId) out = move(move(out, old.accountId, saving), sid, -convert(saving, 'BOB', accountOf(out, sid)?.currency ?? 'BOB', st.settings.rate));
+      const main = st.settings.mainCurrency ?? 'BOB';
+      if (saving > 0 && sid && sid !== old.accountId) out = move(move(out, old.accountId, convert(saving, main, accountOf(out, old.accountId)?.currency ?? 'BOB', st.settings.rate)), sid, -convert(saving, main, accountOf(out, sid)?.currency ?? 'BOB', st.settings.rate));
       return out;
     });
   },
@@ -498,8 +511,8 @@ export const actions = {
       const from = accountOf(st, fromAccountId);
       const to = accountOf(st, sid);
       if (from && to && from.id !== to.id) {
-        const out2 = convert(amount, 'BOB', from.currency, st.settings.rate);
-        const t = { id: newId(), date: day, time: clockOf(), from: from.id, to: to.id, amount: out2, received: convert(amount, 'BOB', to.currency, st.settings.rate) };
+        const out2 = convert(amount, st.settings.mainCurrency ?? 'BOB', from.currency, st.settings.rate);
+        const t = { id: newId(), date: day, time: clockOf(), from: from.id, to: to.id, amount: out2, received: convert(amount, st.settings.mainCurrency ?? 'BOB', to.currency, st.settings.rate) };
         out = move(move({ ...out, transfers: [...out.transfers, t] }, from.id, -t.amount), to.id, t.received);
       }
       return out;
@@ -515,10 +528,59 @@ export const actions = {
       const from = accountOf(st, st.settings.savingAccountId);
       const to = accountOf(st, toAccountId);
       if (from && to && from.id !== to.id) {
-        const t = { id: newId(), date: day, time: clockOf(), from: from.id, to: to.id, amount: convert(n, 'BOB', from.currency, st.settings.rate), received: convert(n, 'BOB', to.currency, st.settings.rate) };
+        const t = { id: newId(), date: day, time: clockOf(), from: from.id, to: to.id, amount: convert(n, st.settings.mainCurrency ?? 'BOB', from.currency, st.settings.rate), received: convert(n, st.settings.mainCurrency ?? 'BOB', to.currency, st.settings.rate) };
         out = move(move({ ...out, transfers: [...out.transfers, t] }, from.id, -t.amount), to.id, t.received);
       }
       return out;
+    });
+  },
+
+  /** «Meter a la alcancía»: pasa plata a tu ahorro (y a tu meta principal, si tienes). */
+  toPiggy(day: ISODate, amount: number, fromAccountId: string) {
+    const st = snap.state;
+    if (!st || amount <= 0) return;
+    const main = st.goals.find((g) => g.main) ?? st.goals[0];
+    if (main) {
+      actions.addToGoal(main.id, day, amount, fromAccountId);
+      return;
+    }
+    const from = accountOf(st, fromAccountId);
+    const to = accountOf(st, st.settings.savingAccountId);
+    if (from && to && from.id !== to.id) actions.transfer(day, from.id, to.id, convert(amount, st.settings.mainCurrency ?? 'BOB', from.currency, st.settings.rate), convert(amount, st.settings.mainCurrency ?? 'BOB', to.currency, st.settings.rate));
+  },
+
+  // ----- Modo entrenador -----
+  setTeamCode(code: string) {
+    updateSettings((s) => {
+      const next = { ...s };
+      if (code.trim()) next.teamCode = code.trim().slice(0, 40);
+      else delete next.teamCode;
+      return next;
+    });
+  },
+  setCoachNote(note: { text: string; at: string } | null) {
+    updateSettings((s) => {
+      const next = { ...s };
+      if (note) next.coachNote = note;
+      else delete next.coachNote;
+      return next;
+    });
+  },
+  addMember(name: string, code: string) {
+    update((st) => ({ ...st, team: [...st.team, { id: newId(), name: name.trim().slice(0, 40), code: code.trim().slice(0, 40) }] }));
+  },
+  removeMember(id: string) {
+    update((st) => ({ ...st, team: st.team.filter((m) => m.id !== id) }));
+  },
+  saveMemberSummary(id: string, summary: unknown) {
+    update((st) => ({ ...st, team: st.team.map((m) => (m.id === id ? { ...m, last: summary, lastAt: new Date().toISOString() } : m)) }));
+  },
+  setMoneyPrefs(p: { mainCurrency?: Currency; incomeMode?: 'quincena' | 'libre'; dailyLimit?: number; savingPct?: number; remindAt?: string }) {
+    updateSettings((s) => {
+      const next = { ...s, ...p };
+      if (next.mainCurrency !== 'PEN') delete next.mainCurrency;
+      if (next.incomeMode !== 'libre') delete next.incomeMode;
+      return next;
     });
   },
 

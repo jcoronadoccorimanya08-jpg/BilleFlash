@@ -5,7 +5,7 @@
 import { DEFAULT_ACCOUNTS, DEFAULT_RATE } from './config';
 import { isValidISODate } from './dates';
 import { isAccent, isTextSize, isTheme } from './look';
-import type { Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, Transfer } from './types';
+import type { Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, TeamMember, Transfer } from './types';
 
 const CATS: Category[] = ['comida', 'pasaje', 'antojos', 'universidad', 'salud', 'casa', 'otros'];
 
@@ -76,7 +76,13 @@ function sanitizeIncomes(v: unknown, ids: Set<string>): Income[] {
       if (isObj(e.quincena.goals)) for (const [k, n] of Object.entries(e.quincena.goals)) if (pos(n)) goals[k.slice(0, 40)] = pos(n)!;
       q = { saving: pos(e.quincena.saving) ?? 0, ...(Object.keys(goals).length ? { goals } : {}) };
     }
-    out.push({ id: str(e.id, 40) || newId(), date: e.date, time: time(e.time), desc: str(e.desc, 60) || 'Ingreso', amount, accountId: str(e.accountId, 40), ...(q ? { quincena: q } : {}) });
+    let kept: Income['kept'] = undefined;
+    if (isObj(e.kept)) {
+      const goals: Record<string, number> = {};
+      if (isObj(e.kept.goals)) for (const [k, n] of Object.entries(e.kept.goals)) if (pos(n)) goals[k.slice(0, 40)] = pos(n)!;
+      kept = { saving: pos(e.kept.saving) ?? 0, ...(Object.keys(goals).length ? { goals } : {}) };
+    }
+    out.push({ id: str(e.id, 40) || newId(), date: e.date, time: time(e.time), desc: str(e.desc, 60) || 'Ingreso', amount, accountId: str(e.accountId, 40), ...(q ? { quincena: q } : {}), ...(kept ? { kept } : {}) });
   }
   return out;
 }
@@ -169,7 +175,7 @@ function sanitizeShots(v: unknown): CapitalShot[] {
     const [rate, enMano, meDeben, debo, capital] = [num(s.rate), num(s.enMano), num(s.meDeben), num(s.debo), num(s.capital)];
     if ([rate, enMano, meDeben, debo, capital].some((x) => x === null)) continue;
     const usd = pos(s.usd);
-    out.push({ date: s.date, time: time(s.time), rate: rate!, ...(usd ? { usd } : {}), enMano: enMano!, meDeben: meDeben!, debo: debo!, capital: capital! });
+    out.push({ date: s.date, time: time(s.time), rate: rate!, ...(s.cur === 'PEN' ? { cur: 'PEN' as Currency } : {}), ...(usd ? { usd } : {}), enMano: enMano!, meDeben: meDeben!, debo: debo!, capital: capital! });
   }
   return out;
 }
@@ -182,6 +188,13 @@ function sanitizeSettings(v: unknown): Settings | null {
     startDate: v.startDate,
     rate: rate && rate > 0 ? rate : DEFAULT_RATE,
     ...(pos(v.usdRate) ? { usdRate: pos(v.usdRate)! } : {}),
+    ...(v.mainCurrency === 'PEN' ? { mainCurrency: 'PEN' as Currency } : {}),
+    ...(v.incomeMode === 'libre' ? { incomeMode: 'libre' as const } : {}),
+    ...(pos(v.dailyLimit) !== null ? { dailyLimit: pos(v.dailyLimit)! } : {}),
+    ...(pos(v.savingPct) !== null ? { savingPct: Math.min(100, pos(v.savingPct)!) } : {}),
+    ...(typeof v.remindAt === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v.remindAt) ? { remindAt: v.remindAt } : {}),
+    ...(str(v.teamCode, 40) ? { teamCode: str(v.teamCode, 40) } : {}),
+    ...(isObj(v.coachNote) && str(v.coachNote.text, 280) ? { coachNote: { text: str(v.coachNote.text, 280), at: str(v.coachNote.at, 40) } } : {}),
     quincena: { amount: pos(q.amount) ?? 0, saving: pos(q.saving) ?? 0, days: Math.max(1, Math.round(pos(q.days) ?? 15)) },
     carryStart: num(v.carryStart) ?? 0,
     ...(str(v.savingAccountId, 40) ? { savingAccountId: str(v.savingAccountId, 40) } : {}),
@@ -221,6 +234,15 @@ export function sanitizeGoals(v: unknown): Goal[] {
   return out;
 }
 
+function sanitizeTeam(v: unknown): TeamMember[] {
+  const out: TeamMember[] = [];
+  for (const m of arr(v)) {
+    if (!isObj(m) || !str(m.name, 40) || !str(m.code, 40)) continue;
+    out.push({ id: str(m.id, 40) || newId(), name: str(m.name, 40), code: str(m.code, 40), ...(m.last !== undefined ? { last: m.last } : {}), ...(typeof m.lastAt === 'string' ? { lastAt: m.lastAt } : {}) });
+  }
+  return out;
+}
+
 export function sanitizeState(v: unknown): AppState | null {
   if (!isObj(v) || v.schema !== 1) return null;
   const settings = sanitizeSettings(v.settings);
@@ -241,5 +263,6 @@ export function sanitizeState(v: unknown): AppState | null {
     bills: sanitizeBills(v.bills),
     shots: sanitizeShots(v.shots),
     goals: sanitizeGoals(v.goals),
+    team: sanitizeTeam(v.team),
   };
 }

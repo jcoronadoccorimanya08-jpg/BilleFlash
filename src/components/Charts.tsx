@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatShort, weekdayInitial } from '../lib/dates';
-import { CATEGORIES, money, type DayBar } from '../lib/engine';
+import { CATEGORIES, money, shotBs, shotPen, type DayBar } from '../lib/engine';
 import type { Category, CapitalShot } from '../lib/types';
 
 /**
@@ -91,7 +91,7 @@ export function CapitalCurve({ shots, usdRate }: { shots: CapitalShot[]; usdRate
   const [cur, setCur] = useState<Cur>('BOB');
   const [sel, setSel] = useState<number | null>(null);
   if (shots.length < 2) return <p className="muted">La curva aparece desde tu segunda foto del capital.</p>;
-  const value = (s: CapitalShot) => (cur === 'BOB' ? s.capital : cur === 'PEN' ? s.capital / s.rate : (s.usd ?? usdRate) ? s.capital / s.rate / (s.usd ?? usdRate)! : NaN);
+  const value = (s: CapitalShot) => (cur === 'BOB' ? shotBs(s) : cur === 'PEN' ? shotPen(s) : (s.usd ?? usdRate) ? shotPen(s) / (s.usd ?? usdRate)! : NaN);
   const vals = shots.map(value);
   const ok = vals.every((v) => Number.isFinite(v));
   const fmt = (v: number) => (cur === 'USD' ? `$ ${v.toFixed(2)}` : money(v, cur === 'PEN' ? 'PEN' : 'BOB'));

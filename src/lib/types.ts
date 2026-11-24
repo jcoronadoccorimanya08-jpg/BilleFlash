@@ -1,7 +1,7 @@
 import type { ISODate } from './dates';
 
 export type Theme = 'system' | 'dark' | 'light' | 'black';
-export type Accent = 'verde' | 'violeta' | 'lima' | 'rosa';
+export type Accent = 'verde' | 'violeta' | 'lima' | 'rosa' | 'vino';
 export type TextSize = 'normal' | 'grande';
 
 /** Bolivianos o soles. */
@@ -62,6 +62,8 @@ export interface Income {
   accountId: string;
   /** Si es una quincena: cuánto se fue al ahorro. */
   quincena?: { saving: number; /** Cuánto de ese ahorro fue a cada meta. */ goals?: Record<string, number> };
+  /** Modo libre: lo que se apartó solo al ahorro de esta plata. */
+  kept?: { saving: number; goals?: Record<string, number> };
 }
 
 /** Pasaste plata de una cuenta a otra (sacar del banco, cambiar soles…). */
@@ -125,6 +127,8 @@ export interface CapitalShot {
   date: ISODate;
   time: string;
   rate: number;
+  /** En qué moneda está esta foto (sin dato: Bs). */
+  cur?: Currency;
   /** Soles por 1 dólar, si lo escribiste (para la columna en dólares). */
   usd?: number;
   enMano: number;
@@ -140,6 +144,20 @@ export interface Settings {
   rate: number;
   /** Soles por 1 dólar (opcional, solo para ver tu capital en dólares). */
   usdRate?: number;
+  /** Tu moneda principal: en ella se ven tu límite, tu capital y tus gráficas (sin dato: Bs). */
+  mainCurrency?: Currency;
+  /** Cómo te llega la plata: por quincena (fija) o libre (cuando te dan, sin fecha). */
+  incomeMode?: 'quincena' | 'libre';
+  /** Modo libre: tu límite de cada día (en tu moneda principal). */
+  dailyLimit?: number;
+  /** Modo libre: qué % de cada plata que te dan se va solo al ahorro. */
+  savingPct?: number;
+  /** Hora del aviso de la noche («HH:MM»), para el widget. */
+  remindAt?: string;
+  /** Tu código de equipo (para cifrar el resumen que le mandas a tu entrenador). */
+  teamCode?: string;
+  /** Lo último que te mandó tu entrenador. */
+  coachNote?: { text: string; at: string };
   /** Tu quincena. */
   quincena: { amount: number; saving: number; days: number };
   /** Lo que te sobró antes de usar la app (pasa a tu primera quincena). */
@@ -170,4 +188,16 @@ export interface AppState {
   bills: Bill[];
   shots: CapitalShot[];
   goals: Goal[];
+  /** Modo entrenador: las personas que te mandan su resumen. */
+  team: TeamMember[];
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  /** El código que acordaron (para abrir su resumen). */
+  code: string;
+  /** Su último resumen (lo que ella eligió mandarte). */
+  last?: unknown;
+  lastAt?: string;
 }

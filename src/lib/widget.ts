@@ -37,6 +37,10 @@ export interface WidgetPayload extends WidgetFrame {
   v: 1;
   app: 'billeflash';
   accent: Accent;
+  /** Moneda principal: «BOB» o «PEN» (para escribir Bs o S/). */
+  cur: 'BOB' | 'PEN';
+  /** Hora del aviso de la noche («HH:MM»). */
+  remindAt: string;
   discreet: boolean;
   /** Mañana y pasado mañana tal como se verían sin abrir la app: así el widget cambia de día solo. */
   ahead: WidgetFrame[];
@@ -78,6 +82,8 @@ export function buildWidgetPayload(state: AppState, now: Date): WidgetPayload {
     ...buildWidgetFrame(state, now),
     accent: state.settings.accent ?? 'verde',
     discreet: state.settings.discreet,
+    cur: state.settings.mainCurrency ?? 'BOB',
+    remindAt: state.settings.remindAt ?? '22:30',
     ahead: Array.from({ length: AHEAD_DAYS }, (_, i) => {
       // Las 12:00 de ese día: así el «día de la app» es justo ese.
       const day = addDays(appDay(base), i + 1);

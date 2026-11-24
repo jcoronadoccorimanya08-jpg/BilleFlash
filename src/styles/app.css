@@ -52,6 +52,8 @@
   --acc-lima-ink: #1b2a05;
   --acc-rosa: #ff8ac4;
   --acc-rosa-ink: #3a0a22;
+  --acc-vino: #e0727f;
+  --acc-vino-ink: #2a070c;
   --fail: #ee6f5b;
   --fail-ink: #2a0b05;
   --fail-soft: #3d1e19;
@@ -107,6 +109,8 @@
     --acc-lima-ink: #ffffff;
     --acc-rosa: #c2307a;
     --acc-rosa-ink: #ffffff;
+    --acc-vino: #8e1f33;
+    --acc-vino-ink: #ffffff;
     --fail: #b8432f;
     --fail-ink: #ffffff;
     --fail-soft: #f6e1dc;
@@ -161,6 +165,8 @@
   --acc-lima-ink: #ffffff;
   --acc-rosa: #c2307a;
   --acc-rosa-ink: #ffffff;
+  --acc-vino: #8e1f33;
+  --acc-vino-ink: #ffffff;
   --fail: #b8432f;
   --fail-ink: #ffffff;
   --fail-soft: #f6e1dc;
@@ -219,6 +225,10 @@
 :root[data-accent='rosa'] {
   --acc: var(--acc-rosa);
   --acc-ink: var(--acc-rosa-ink);
+}
+:root[data-accent='vino'] {
+  --acc: var(--acc-vino);
+  --acc-ink: var(--acc-vino-ink);
 }
 :root[data-theme='black'] {
   color-scheme: dark;
@@ -3419,4 +3429,52 @@ dialog.bf-sheet {
 }
 .bf-tip {
   min-height: 2.6em;
+}
+.bf-piggy-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bf-piggy-top span {
+  display: block;
+  font-size: 12.5px;
+}
+.bf-piggy-top b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.bf-piggy-top .bf-piggy-sums {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.bf-piggy-top .bf-piggy-streak {
+  margin-top: 2px;
+  color: var(--muted);
+}
+.bf-note {
+  justify-content: space-between;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.bf-note span {
+  flex: 1;
+}
+.bf-goal-mini {
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+}
+.bf-goal-mini .bf-bar {
+  margin: 0;
+}
+.bf-member-view h3.card-title {
+  margin-top: 8px;
+  font-size: 15px;
 }
