@@ -695,8 +695,24 @@ export const actions = {
       }),
     }));
   },
+  /** Quita un pago fijo: no se borra, pasa a «Pagos quitados» y se puede recuperar. */
   deleteBill(id: string) {
-    update((st) => ({ ...st, bills: st.bills.filter((b) => b.id !== id) }));
+    update((st) => {
+      const b = st.bills.find((x) => x.id === id);
+      if (!b) return st;
+      return { ...st, bills: st.bills.filter((x) => x.id !== id), removedBills: [...(st.removedBills ?? []), { ...b, removedAt: new Date().toISOString() }].slice(-30) };
+    });
+  },
+  /** Vuelve a poner un pago quitado, con todo su historial. */
+  restoreBill(id: string) {
+    update((st) => {
+      const r = (st.removedBills ?? []).find((x) => x.id === id);
+      if (!r) return st;
+      const { removedAt: _gone, ...b } = r;
+      void _gone;
+      const bill: Bill = st.bills.some((x) => x.id === b.id) ? { ...b, id: newId() } : b;
+      return { ...st, bills: [...st.bills, bill], removedBills: (st.removedBills ?? []).filter((x) => x.id !== id) };
+    });
   },
   /** Deshace el pago de una deuda (o un cobro): la plata vuelve como estaba. */
   undoDebtPay(debtId: string, index: number) {

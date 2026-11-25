@@ -3,7 +3,7 @@ import { AmountField, PayForm } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { ConfirmDialog, ScreenHeader, SectionTitle, Sheet } from '../components/ui';
 import { CURRENCY_SIGN } from '../lib/config';
-import { addMonths, formatShort, type ISODate } from '../lib/dates';
+import { addMonths, formatShort, localDateOf, type ISODate } from '../lib/dates';
 import { billStatus, money, parseAmount, type BillStatus } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { actions } from '../lib/store';
@@ -68,6 +68,33 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
       {section('mio', 'De mi plata')}
       {section('depa', 'Del depa (plata aparte)')}
       {!state.bills.length && <p className="muted">Agrega tus pagos: depa, luz, internet, Claude, gym…</p>}
+      {(state.removedBills ?? []).length > 0 && (
+        <>
+          <SectionTitle>Pagos quitados</SectionTitle>
+          <div className="card list">
+            {[...(state.removedBills ?? [])].reverse().map((b) => (
+              <div key={b.id} className="item">
+                <span className="txt">
+                  <b>
+                    {b.name} · {money(b.amount, b.currency)}
+                  </b>
+                  <span>Lo quitaste el {formatShort(localDateOf(b.removedAt))}. Vuelve con todo su historial.</span>
+                </span>
+                <button
+                  type="button"
+                  className="btn sm primary"
+                  onClick={() => {
+                    actions.restoreBill(b.id);
+                    toast(`${b.name} volvió a tus pagos.`, 'success');
+                  }}
+                >
+                  Recuperar
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       <button type="button" className="btn ghost" onClick={() => setEdit('new')}>
         <Icon name="plus" size={18} /> Nuevo pago
       </button>
@@ -261,7 +288,7 @@ function BillForm({ bill, state, today, onDone }: { bill: Bill | null; state: Ap
         open={del}
         onClose={() => setDel(false)}
         title="¿Quitar este pago?"
-        body="Ya no te avisará. Lo que pagaste antes queda en tus cuentas como está."
+        body="Ya no te avisará. Lo que pagaste queda en tus cuentas como está. Si te equivocas, lo recuperas abajo, en «Pagos quitados»."
         confirmLabel="Quitar"
         danger
         onConfirm={() => {

@@ -283,3 +283,17 @@ test('pagar 2 meses de una vez, verlo en Hoy y en Movimientos, y deshacerlo', as
   await page.getByRole('button', { name: /Movimientos/ }).click();
   await expect(page.locator('.mv-item').filter({ hasText: 'Cuadre a mano' })).toContainText('−Bs 3');
 });
+
+test('un pago quitado se recupera con su historial', async ({ page }) => {
+  await setupFromFile(page);
+  await nav(page, 'Pagos');
+  const internet = page.locator('.bf-bill').filter({ hasText: 'Internet' });
+  await internet.getByRole('button', { name: 'Pagar' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Pagado' }).click();
+  await internet.locator('.bf-bill-txt').click();
+  await page.getByRole('button', { name: 'Quitar este pago' }).click();
+  await page.locator('dialog[open]').last().getByRole('button', { name: 'Quitar' }).click();
+  await expect(page.locator('.bf-bill')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Recuperar' }).click();
+  await expect(internet).toContainText('Atrasado: 2 meses');
+});

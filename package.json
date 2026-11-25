@@ -1,7 +1,7 @@
 {
   "name": "billeflash",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "BilleFlash: billetera personal rápida (gastos del día, límite, cuentas en Bs y soles, deudas con cuotas y pagos). PWA offline con patrón, huella y datos cifrados.",
   "type": "module",
   "scripts": {

@@ -218,7 +218,11 @@ export interface AppState {
   team: TeamMember[];
   /** Cuadres a mano (desde la 1.7). */
   adjusts?: Adjust[];
+  /** Pagos fijos quitados: se pueden recuperar (desde la 1.8). */
+  removedBills?: RemovedBill[];
 }
+
+export type RemovedBill = Bill & { removedAt: string };
 
 export interface TeamMember {
   id: string;

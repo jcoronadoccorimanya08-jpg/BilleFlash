@@ -5,7 +5,7 @@
 import { DEFAULT_ACCOUNTS, DEFAULT_RATE } from './config';
 import { isValidISODate } from './dates';
 import { isAccent, isTextSize, isTheme } from './look';
-import type { Adjust, Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, TeamMember, Transfer } from './types';
+import type { Adjust, RemovedBill, Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, TeamMember, Transfer } from './types';
 
 const CATS: Category[] = ['comida', 'pasaje', 'antojos', 'universidad', 'salud', 'casa', 'otros'];
 
@@ -273,7 +273,17 @@ export function sanitizeState(v: unknown): AppState | null {
     goals: sanitizeGoals(v.goals),
     team: sanitizeTeam(v.team),
     adjusts: sanitizeAdjusts(v.adjusts, ids),
+    removedBills: sanitizeRemovedBills(v.removedBills),
   };
+}
+
+function sanitizeRemovedBills(v: unknown): RemovedBill[] {
+  const out: RemovedBill[] = [];
+  for (const x of arr(v).slice(-30)) {
+    const b = sanitizeBills([x])[0];
+    if (b && isObj(x)) out.push({ ...b, removedAt: typeof x.removedAt === 'string' ? x.removedAt : new Date().toISOString() });
+  }
+  return out;
 }
 
 function sanitizeAdjusts(v: unknown, ids: Set<string>): Adjust[] {

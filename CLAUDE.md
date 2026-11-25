@@ -20,7 +20,7 @@ PWA personal de plata: anotar gastos en segundos, límite diario, cuentas en Bs 
 - **Quincena**: al registrarla, el ahorro se aparta solo a la cuenta de ahorro. Límite diario **fijo** = (quincena − ahorro) ÷ días (15). Lo que sobra o falta pasa a la siguiente (`carry`).
 - **Capital** = en mano + me deben − debo, en Bs con el tipo de cambio (variable, lo escribe la persona). Cada cierre guarda una foto (`shots`).
 - **Deudas** en su moneda, nunca se cruzan solas; plan de cuotas opcional (`nextInstallment`).
-- **Pagos**: mensuales (con `nextDue`, cuenta meses atrasados) o «cuando llega el recibo». `source: 'depa'` no sale de las cuentas propias.
+- **Pagos**: mensuales (con `nextDue`, cuenta meses atrasados) o «cuando llega el recibo». `source: 'depa'` no sale de las cuentas propias. «Quitar» no borra: pasa a «Pagos quitados» (`removedBills`) y se recupera con su historial.
 - **Moneda principal** (`settings.mainCurrency`, sin dato = Bs): límite, capital y gráficas en esa moneda (`toMain`, `money()` usa la principal).
 - **Plata sin fecha fija** (`incomeMode: 'libre'`): límite diario fijo (`dailyLimit`) y cada plata que entra aparta solo su % (`savingPct`) a la alcancía (`kept`).
 - **Alcancía** (`piggyMoves`, `piggyStats`): cada depósito con fecha y hora, semana, mes y días seguidos ahorrando. Sin redondeos: cada centavo vale.
