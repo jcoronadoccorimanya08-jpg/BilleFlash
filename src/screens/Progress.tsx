@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SyncCard } from '../components/SyncCard';
-import { linkSync, sync, unlinkSync } from '../lib/syncSetup';
+import { syncCardProps } from '../lib/syncSetup';
 import { AccountSelect, AmountField } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { CapitalCurve, CategoryBars, DayBars } from '../components/Charts';
@@ -445,7 +445,7 @@ function Settings({ state, today, hasBio }: { state: AppState; today: ISODate; h
       </section>
 
       <SectionTitle>☁️ Celular ↔ tablet</SectionTitle>
-      <SyncCard code={state.settings.syncCode} onSet={linkSync} onOff={unlinkSync} onNow={() => void sync.syncNow()} />
+      <SyncCard code={state.settings.syncCode} {...syncCardProps} />
 
       <SectionTitle>Respaldo</SectionTitle>
       <section className="card stack">

@@ -3,7 +3,7 @@ import { AmountField, PayForm } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { ConfirmDialog, ScreenHeader, SectionTitle, Sheet } from '../components/ui';
 import { CURRENCY_SIGN } from '../lib/config';
-import { formatShort, type ISODate } from '../lib/dates';
+import { addMonths, formatShort, type ISODate } from '../lib/dates';
 import { billStatus, money, parseAmount, type BillStatus } from '../lib/engine';
 import { toast } from '../lib/feedback';
 import { actions } from '../lib/store';
@@ -24,6 +24,7 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
   const [pay, setPay] = useState<Bill | null>(null);
   const [edit, setEdit] = useState<Bill | 'new' | null>(null);
   const [receipt, setReceipt] = useState<Bill | null>(null);
+  const [months, setMonths] = useState(1);
   const order = { late: 0, today: 1, soon: 2, ok: 3, none: 4 } as const;
   const rows = state.bills.map((b) => ({ b, st: billStatus(b, today) })).sort((x, y) => order[x.st.kind] - order[y.st.kind]);
   const section = (source: Bill['source'], title: string) => {
@@ -42,7 +43,11 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
                 <span>{statusText(b, st)}</span>
               </button>
               {b.nextDue ? (
-                <button type="button" className={`btn sm ${st.kind === 'late' || st.kind === 'today' ? 'primary' : ''}`} onClick={() => setPay(b)}>
+                <button type="button" className={`btn sm ${st.kind === 'late' || st.kind === 'today' ? 'primary' : ''}`} onClick={() => {
+                    setMonths(1);
+                    setPay(b);
+                  }}
+                >
                   Pagar
                 </button>
               ) : (
@@ -70,10 +75,28 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
       <Sheet open={Boolean(pay)} title={pay ? `Pagar ${pay.name}` : ''} onClose={() => setPay(null)}>
         {pay && (
           <>
-            <p className="fine">Se paga el vencimiento del {formatShort(pay.nextDue!)}. Si debes varios meses, págalos uno por uno.</p>
+            {pay.kind === 'mensual' && (
+              <div className="stack">
+                <span className="fine">¿Cuántos meses cubre este pago?</span>
+                <div className="segmented" role="radiogroup" aria-label="Meses que cubre">
+                  {[1, 2, 3, 4].map((n) => (
+                    <button key={n} type="button" role="radio" aria-checked={months === n} onClick={() => setMonths(n)}>
+                      {n} {n === 1 ? 'mes' : 'meses'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="fine">
+              {pay.kind === 'mensual' && months > 1
+                ? `Cubre ${months} meses: desde el vencimiento del ${formatShort(pay.nextDue!)} hasta el del ${formatShort(addMonths(pay.nextDue!, months - 1))}.`
+                : `Se paga el vencimiento del ${formatShort(pay.nextDue!)}.`}{' '}
+              Queda en tus movimientos (Cuentas → 📜) y en la lista de hoy.
+            </p>
             <PayForm
+              key={months}
               state={state}
-              initial={pay.amount}
+              initial={Math.round(pay.amount * (pay.kind === 'mensual' ? months : 1) * 100) / 100}
               currency={pay.currency}
               accountLabelText="De dónde salió"
               allowNone
@@ -81,8 +104,8 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
               defaultNone={pay.source === 'depa'}
               confirm="Pagado"
               onDone={(amount, acc) => {
-                actions.payBill(pay.id, today, amount, acc);
-                toast(`${pay.name} pagado.`, 'success');
+                actions.payBill(pay.id, today, amount, acc, pay.kind === 'mensual' ? months : 1);
+                toast(`${pay.name} pagado${pay.kind === 'mensual' && months > 1 ? ` (${months} meses)` : ''}.`, 'success');
                 setPay(null);
               }}
             />
@@ -93,7 +116,7 @@ export function BillsScreen({ state, today }: { state: AppState; today: ISODate 
         {receipt && <ReceiptForm b={receipt} today={today} onDone={() => setReceipt(null)} />}
       </Sheet>
       <Sheet open={Boolean(edit)} title={edit === 'new' ? 'Nuevo pago' : edit ? `Editar ${edit.name}` : ''} onClose={() => setEdit(null)}>
-        {edit && <BillForm bill={edit === 'new' ? null : edit} today={today} onDone={() => setEdit(null)} />}
+        {edit && <BillForm bill={edit === 'new' ? null : (state.bills.find((b) => b.id === edit.id) ?? null)} state={state} today={today} onDone={() => setEdit(null)} />}
       </Sheet>
     </main>
   );
@@ -125,7 +148,8 @@ function ReceiptForm({ b, today, onDone }: { b: Bill; today: ISODate; onDone: ()
   );
 }
 
-function BillForm({ bill, today, onDone }: { bill: Bill | null; today: ISODate; onDone: () => void }) {
+function BillForm({ bill, state, today, onDone }: { bill: Bill | null; state: AppState; today: ISODate; onDone: () => void }) {
+  const [undoIdx, setUndoIdx] = useState<number | null>(null);
   const [name, setName] = useState(bill?.name ?? '');
   const [amount, setAmount] = useState(bill ? String(bill.amount) : '');
   const [currency, setCurrency] = useState<Currency>(bill?.currency ?? 'BOB');
@@ -183,6 +207,51 @@ function BillForm({ bill, today, onDone }: { bill: Bill | null; today: ISODate; 
       <button type="submit" className="btn primary" disabled={!name.trim() || n === null}>
         Guardar
       </button>
+      {bill && bill.paid.length > 0 && (
+        <section className="stack">
+          <b>Pagos hechos</b>
+          <div className="card list bf-paid-list">
+            {bill.paid
+              .map((p, i) => ({ p, i }))
+              .reverse()
+              .slice(0, 24)
+              .map(({ p, i }) => {
+                const a = state.accounts.find((x) => x.id === p.accountId);
+                return (
+                  <div key={i} className="item">
+                    <span className="txt">
+                      <b>
+                        {money(p.amount, bill.currency)}
+                        {(p.months ?? 1) > 1 ? ` · ${p.months} meses` : ''}
+                      </b>
+                      <span>
+                        Pagado el {formatShort(p.date)}
+                        {p.time ? ` ${p.time}` : ''} · {a ? `de ${a.name}` : bill.source === 'depa' ? 'plata del depa' : 'no pasó por tus cuentas'}
+                        {bill.kind === 'mensual' ? ` · mes del ${formatShort(p.due)}` : ''}
+                      </span>
+                    </span>
+                    <button type="button" className="btn sm" onClick={() => setUndoIdx(i)}>
+                      Deshacer
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      )}
+      <ConfirmDialog
+        open={undoIdx !== null}
+        onClose={() => setUndoIdx(null)}
+        title="¿Deshacer este pago?"
+        body="La plata vuelve a la cuenta de donde salió y ese mes (o esos meses) vuelven a quedar pendientes."
+        confirmLabel="Deshacer"
+        danger
+        onConfirm={() => {
+          if (bill && undoIdx !== null) actions.undoBillPay(bill.id, undoIdx);
+          toast('Pago deshecho.', 'success');
+          onDone();
+        }}
+      />
       {bill && (
         <button type="button" className="btn danger" onClick={() => setDel(true)}>
           <Icon name="trash" size={18} /> Quitar este pago

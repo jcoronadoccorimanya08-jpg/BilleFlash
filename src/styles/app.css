@@ -3505,3 +3505,95 @@ dialog.bf-sheet {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-word;
 }
+
+/* ---------- BilleFlash: Movimientos ---------- */
+.mv-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.mv-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 12px 14px;
+  font-size: 0.92rem;
+}
+.mv-in,
+.mv-amt.in {
+  color: var(--accent);
+}
+.mv-out,
+.mv-amt.out {
+  color: var(--fail);
+}
+.mv-date {
+  margin: 6px 2px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: capitalize;
+  font-weight: 600;
+}
+.mv-row {
+  width: 100%;
+  min-height: 56px;
+  gap: 10px;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+.mv-ico {
+  font-size: 1.2rem;
+  width: 28px;
+  text-align: center;
+  flex: none;
+}
+.mv-row .txt {
+  flex: 1;
+  min-width: 0;
+}
+.mv-amt {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.mv-detail {
+  padding: 4px 14px 14px 52px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.mv-detail ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.92rem;
+}
+.bf-tr.fixed {
+  opacity: 0.92;
+}
+.bf-tr.fixed small {
+  color: var(--info);
+}
+.bf-fixed-note {
+  padding: 8px 14px 12px;
+}
+.sync-err {
+  color: var(--fail);
+}
+.sync-choose {
+  border-color: var(--info-line);
+}
+.sync-undo {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.bf-months {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bf-paid-list .item {
+  min-height: 52px;
+}

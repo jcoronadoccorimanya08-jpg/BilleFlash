@@ -242,3 +242,44 @@ test('modo hermana: soles, «me dieron» con 10 % a la alcancía, monedas y resu
   await expect(member).toContainText('🐷 S/ 2,7');
   await expect(member).toContainText('Cursos: S/ 2,7 de S/ 300');
 });
+
+test('pagar 2 meses de una vez, verlo en Hoy y en Movimientos, y deshacerlo', async ({ page }) => {
+  await setupFromFile(page);
+  await nav(page, 'Pagos');
+  const internet = page.locator('.bf-bill').filter({ hasText: 'Internet' });
+  await expect(internet).toContainText('Atrasado: 3 meses');
+  await internet.getByRole('button', { name: 'Pagar' }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByRole('radio', { name: '2 meses' }).click();
+  await expect(sheet.getByLabel('Monto (Bs)')).toHaveValue('20');
+  await sheet.getByLabel('De dónde salió').selectOption({ label: 'Monedas (Bs) · Bs 50' });
+  await sheet.getByRole('button', { name: 'Pagado' }).click();
+  await expect(internet).toContainText('Atrasado: 1 mes');
+
+  // En Hoy se ve, pero no cuenta para el límite.
+  await nav(page, 'Hoy');
+  await expect(page.locator('.bf-tr.fixed')).toContainText('Internet (2 meses)');
+
+  // En Movimientos: de qué cuenta salió, y se deshace.
+  await nav(page, 'Cuentas');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Monedas' })).toContainText('Bs 30');
+  await page.getByRole('button', { name: /Movimientos/ }).click();
+  const row = page.locator('.mv-item').filter({ hasText: 'Internet (2 meses)' });
+  await row.getByRole('button').first().click();
+  await expect(row).toContainText('Salió de Monedas: Bs 20');
+  await row.getByRole('button', { name: /Deshacer/ }).click();
+  await page.locator('dialog[open]').last().getByRole('button', { name: 'Deshacer' }).click();
+  await expect(page.locator('.mv-item').filter({ hasText: 'Internet' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Monedas' })).toContainText('Bs 50');
+  await nav(page, 'Pagos');
+  await expect(internet).toContainText('Atrasado: 3 meses');
+
+  // Cuadrar a mano queda anotado.
+  await nav(page, 'Cuentas');
+  await page.locator('.bf-acc').filter({ hasText: 'Monedas' }).click();
+  await page.getByLabel('Lo que de verdad tienes (Bs)').fill('47');
+  await page.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('button', { name: /Movimientos/ }).click();
+  await expect(page.locator('.mv-item').filter({ hasText: 'Cuadre a mano' })).toContainText('−Bs 3');
+});

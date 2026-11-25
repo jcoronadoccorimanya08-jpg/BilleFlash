@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AccountSelect, AmountField, Money } from '../components/bf';
 import { GoalsSection } from '../components/Goals';
+import { Movements } from '../components/Movements';
 import { Icon } from '../components/Icon';
 import { ScreenHeader, SectionTitle, Sheet } from '../components/ui';
 import { CURRENCY_SIGN, KIND_LABEL } from '../lib/config';
@@ -17,6 +18,7 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
   const [square, setSquare] = useState<Account | null>(null);
   const [add, setAdd] = useState(false);
   const [move, setMove] = useState(false);
+  const [moves, setMoves] = useState<{ account?: string } | null>(null);
   const groups: [string, Account[]][] = [
     ['En bolivianos', state.accounts.filter((a) => a.currency === 'BOB')],
     ['En soles', state.accounts.filter((a) => a.currency === 'PEN')],
@@ -25,6 +27,10 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
   return (
     <main className="screen">
       <ScreenHeader eyebrow="Dónde está tu plata" title="Cuentas" />
+
+      <button type="button" className="btn primary" onClick={() => setMoves({})}>
+        📜 Movimientos: todo lo que entró y salió
+      </button>
 
       <section className="card bf-capital">
         <div className="bf-cap-main">
@@ -97,10 +103,24 @@ export function AccountsScreen({ state, today }: { state: AppState; today: ISODa
         <RateForm rate={s.rate} usd={s.usdRate} onDone={() => setRate(false)} />
       </Sheet>
       <Sheet open={Boolean(square)} title={square ? `Cuadrar ${square.name}` : ''} onClose={() => setSquare(null)}>
-        {square && <SquareForm a={square} state={state} onDone={() => setSquare(null)} />}
+        {square && (
+          <SquareForm
+            a={square}
+            state={state}
+            today={today}
+            onDone={() => setSquare(null)}
+            onMoves={() => {
+              setMoves({ account: square.id });
+              setSquare(null);
+            }}
+          />
+        )}
       </Sheet>
       <Sheet open={add} title="Nueva cuenta" onClose={() => setAdd(false)}>
         <NewAccount onDone={() => setAdd(false)} />
+      </Sheet>
+      <Sheet open={Boolean(moves)} title="Movimientos" onClose={() => setMoves(null)}>
+        {moves && <Movements state={state} account={moves.account} />}
       </Sheet>
       <Sheet open={move} title="Mover plata" onClose={() => setMove(false)}>
         <MoveForm state={state} today={today} onDone={() => setMove(false)} />
@@ -135,7 +155,7 @@ function RateForm({ rate, usd, onDone }: { rate: number; usd?: number; onDone: (
   );
 }
 
-function SquareForm({ a, state, onDone }: { a: Account; state: AppState; onDone: () => void }) {
+function SquareForm({ a, state, today, onDone, onMoves }: { a: Account; state: AppState; today: ISODate; onDone: () => void; onMoves: () => void }) {
   const [v, setV] = useState(String(a.balance));
   const [name, setName] = useState(a.name);
   const n = v.trim() === '0' ? 0 : parseAmount(v);
@@ -147,8 +167,8 @@ function SquareForm({ a, state, onDone }: { a: Account; state: AppState; onDone:
         e.preventDefault();
         if (n === null) return;
         if (name.trim() && name.trim() !== a.name) actions.updateAccount(a.id, { name: name.trim() });
-        actions.setBalance(a.id, n);
-        toast('Cuenta cuadrada.', 'success');
+        actions.setBalance(a.id, n, today);
+        toast(n === a.balance ? 'Guardado.' : 'Cuenta cuadrada. Quedó anotado en tus movimientos.', 'success');
         onDone();
       }}
     >
@@ -157,9 +177,12 @@ function SquareForm({ a, state, onDone }: { a: Account; state: AppState; onDone:
         <input className="field" value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <AmountField value={v} onChange={setV} label={`Lo que de verdad tienes (${CURRENCY_SIGN[a.currency]})`} autoFocus />
-      <p className="fine">Escribe lo que ves en tu banco o lo que cuentas en tu mano. Así todo cuadra.</p>
+      <p className="fine">Escribe lo que ves en tu banco o lo que cuentas en tu mano. La diferencia queda anotada en tus movimientos (y la puedes deshacer).</p>
       <button type="submit" className="btn primary" disabled={n === null}>
         Guardar
+      </button>
+      <button type="button" className="btn" onClick={onMoves}>
+        📜 Ver los movimientos de {a.name}
       </button>
       {!used && a.balance === 0 && state.accounts.length > 1 && (
         <button

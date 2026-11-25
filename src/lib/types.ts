@@ -90,6 +90,8 @@ export interface DebtPayment {
   amount: number;
   /** La cuenta donde entró (te pagan) o de donde salió (pagas). Vacío: no pasó por tus cuentas. */
   accountId?: string;
+  /** «HH:MM» (desde la 1.7). */
+  time?: string;
 }
 
 /** Una deuda, siempre en su moneda (no se cruza sola con otra). */
@@ -119,7 +121,29 @@ export interface Bill {
   /** «mio»: sale de tus cuentas. «depa»: de la plata del depa que te mandan aparte. */
   source: 'mio' | 'depa';
   /** Pagos hechos (para el historial). */
-  paid: { date: ISODate; due: ISODate; amount: number; accountId?: string }[];
+  paid: BillPayment[];
+}
+
+export interface BillPayment {
+  date: ISODate;
+  /** El primer vencimiento que cubrió. */
+  due: ISODate;
+  amount: number;
+  accountId?: string;
+  /** Cuántos meses cubrió este pago (sin dato: 1). */
+  months?: number;
+  /** «HH:MM» (desde la 1.7). */
+  time?: string;
+}
+
+/** Cuadraste una cuenta a mano: cuánto subió o bajó (queda en tus movimientos). */
+export interface Adjust {
+  id: string;
+  date: ISODate;
+  time: string;
+  accountId: string;
+  /** En la moneda de la cuenta (+ subió, − bajó). */
+  delta: number;
 }
 
 /** Foto de tu capital al cerrar un día (tu tabla amarilla, pero sola). En Bs. */
@@ -192,6 +216,8 @@ export interface AppState {
   goals: Goal[];
   /** Modo entrenador: las personas que te mandan su resumen. */
   team: TeamMember[];
+  /** Cuadres a mano (desde la 1.7). */
+  adjusts?: Adjust[];
 }
 
 export interface TeamMember {

@@ -7,6 +7,7 @@ import { ConfirmDialog, ScreenHeader, Sheet } from '../components/ui';
 import { CLOSE_PHRASES, CURRENCY_SIGN } from '../lib/config';
 import { clockOf, diffDays, formatLong, localDateOf, type ISODate } from '../lib/dates';
 import { accountOf, alerts, antojosLeft, mainOf, canClose, CATEGORIES, categoryInfo, categoryOf, dayStatus, favorites, guessCategory, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
+import { fixedOn, KIND_ICON } from '../lib/movements';
 import { haptic, toast } from '../lib/feedback';
 import { actions } from '../lib/store';
 import type { AppState, Category, Expense } from '../lib/types';
@@ -27,6 +28,7 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
   const closed = st.kind === 'closed';
   const list = state.expenses.filter((e) => e.date === today).sort((a, b) => a.time.localeCompare(b.time));
   const spent = spentOn(state, today);
+  const fixed = fixedOn(state, today);
   const q = quincenaStatus(state, today);
   const within = spent <= q.limit + 0.001;
   const usePct = q.limit > 0 ? Math.min(100, (spent / q.limit) * 100) : 0;
@@ -173,7 +175,7 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
             <span role="columnheader">Costo</span>
             <span role="columnheader">Hora</span>
           </div>
-          {list.length === 0 && <p className="muted bf-empty">Todavía no anotaste gastos hoy.</p>}
+          {list.length === 0 && !fixed.length && <p className="muted bf-empty">Todavía no anotaste gastos hoy.</p>}
           {list.map((e, i) => {
             const a = accountOf(state, e.accountId);
             return (
@@ -194,7 +196,23 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
               </button>
             );
           })}
+          {fixed.map((m) => (
+            <div key={m.key} className="bf-tr fixed" role="row">
+              <span role="cell" aria-label="Pago fijo">
+                {KIND_ICON[m.kind]}
+              </span>
+              <span role="cell" className="bf-desc">
+                {m.title}
+                <small>{m.detail}</small>
+              </span>
+              <span role="cell">
+                <Money n={m.amount} c={m.currency} />
+              </span>
+              <span role="cell">{m.time}</span>
+            </div>
+          ))}
         </div>
+        {fixed.length > 0 && <p className="fine bf-fixed-note">📌 Los pagos fijos y de deudas se ven aquí para que todo cuadre, pero no cuentan para tu límite del día. Para deshacer uno: Cuentas → 📜 Movimientos.</p>}
       </section>
 
       <div className="btn-row">

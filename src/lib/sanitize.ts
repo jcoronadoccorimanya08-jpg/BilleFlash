@@ -5,7 +5,7 @@
 import { DEFAULT_ACCOUNTS, DEFAULT_RATE } from './config';
 import { isValidISODate } from './dates';
 import { isAccent, isTextSize, isTheme } from './look';
-import type { Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, TeamMember, Transfer } from './types';
+import type { Adjust, Account, AccountKind, AppState, Bill, CapitalShot, Category, Currency, DayLog, Debt, DebtPayment, Expense, Goal, Income, Settings, TeamMember, Transfer } from './types';
 
 const CATS: Category[] = ['comida', 'pasaje', 'antojos', 'universidad', 'salud', 'casa', 'otros'];
 
@@ -123,7 +123,7 @@ export function sanitizeDebts(v: unknown): Debt[] {
     for (const p of arr(d.payments)) {
       if (!isObj(p) || !isValidISODate(p.date)) continue;
       const a = pos(p.amount);
-      if (a) payments.push({ date: p.date, amount: a, ...(str(p.accountId, 40) ? { accountId: str(p.accountId, 40) } : {}) });
+      if (a) payments.push({ date: p.date, amount: a, ...(str(p.accountId, 40) ? { accountId: str(p.accountId, 40) } : {}), ...(typeof p.time === 'string' ? { time: time(p.time) } : {}) });
     }
     const plan =
       isObj(d.plan) && pos(d.plan.amount) && pos(d.plan.everyDays) && isValidISODate(d.plan.start)
@@ -152,7 +152,14 @@ export function sanitizeBills(v: unknown): Bill[] {
     const paid: Bill['paid'] = [];
     for (const p of arr(b.paid)) {
       if (isObj(p) && isValidISODate(p.date) && isValidISODate(p.due) && pos(p.amount) !== null)
-        paid.push({ date: p.date, due: p.due, amount: pos(p.amount)!, ...(str(p.accountId, 40) ? { accountId: str(p.accountId, 40) } : {}) });
+        paid.push({
+          date: p.date,
+          due: p.due,
+          amount: pos(p.amount)!,
+          ...(str(p.accountId, 40) ? { accountId: str(p.accountId, 40) } : {}),
+          ...(typeof p.months === 'number' && p.months >= 2 && p.months <= 24 ? { months: Math.round(p.months) } : {}),
+          ...(typeof p.time === 'string' ? { time: time(p.time) } : {}),
+        });
     }
     out.push({
       id: str(b.id, 40) || slugId(name, out.map((x) => x.id)),
@@ -265,5 +272,17 @@ export function sanitizeState(v: unknown): AppState | null {
     shots: sanitizeShots(v.shots),
     goals: sanitizeGoals(v.goals),
     team: sanitizeTeam(v.team),
+    adjusts: sanitizeAdjusts(v.adjusts, ids),
   };
+}
+
+function sanitizeAdjusts(v: unknown, ids: Set<string>): Adjust[] {
+  const out: Adjust[] = [];
+  for (const a of arr(v)) {
+    if (!isObj(a) || !isValidISODate(a.date) || !ids.has(str(a.accountId, 40))) continue;
+    const delta = num(a.delta);
+    if (!delta) continue;
+    out.push({ id: str(a.id, 40) || newId(), date: a.date, time: time(a.time), accountId: str(a.accountId, 40), delta });
+  }
+  return out;
 }

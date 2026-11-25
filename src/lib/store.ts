@@ -19,7 +19,7 @@ import {
   randomBytes,
   toB64,
 } from './crypto';
-import { appDay, clockOf, type ISODate } from './dates';
+import { addMonths, appDay, clockOf, type ISODate } from './dates';
 import { afterPay, accountOf, allocateSaving, round2, shotOf } from './engine';
 import { newId, sanitizeState } from './sanitize';
 import type { Accent, Account, AppState, Bill, Category, Currency, Debt, Expense, Goal, Settings, TextSize } from './types';
@@ -300,7 +300,12 @@ export async function openBackup(record: Pick<VaultRecord, 'lock' | 'data'>, pat
 }
 
 export function replaceState(next: AppState) {
-  commit(next);
+  // Recuperar un respaldo no apaga la sincronización: tu código se queda (y lo recuperado se sube).
+  const code = snap.state?.settings.syncCode;
+  const settings = { ...next.settings };
+  if (code) settings.syncCode = code;
+  else delete settings.syncCode;
+  commit({ ...next, settings });
 }
 
 // ---------- Estado inicial ----------
@@ -478,8 +483,31 @@ export const actions = {
     update((st) => ({ ...st, accounts: st.accounts.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
   },
   /** Cuadrar: escribes lo que de verdad tienes en esa cuenta. */
-  setBalance(id: string, balance: number) {
-    update((st) => ({ ...st, accounts: st.accounts.map((a) => (a.id === id ? { ...a, balance: round2(balance) } : a)) }));
+  setBalance(id: string, balance: number, day?: ISODate) {
+    update((st) => {
+      const acc = accountOf(st, id);
+      if (!acc) return st;
+      const delta = round2(balance - acc.balance);
+      if (!delta) return st;
+      // Queda anotado en tus movimientos (y se puede deshacer).
+      const adj = { id: newId(), date: day ?? appDay(new Date()), time: clockOf(), accountId: id, delta };
+      return move({ ...st, adjusts: [...(st.adjusts ?? []), adj] }, id, delta);
+    });
+  },
+  undoAdjust(id: string) {
+    update((st) => {
+      const a = (st.adjusts ?? []).find((x) => x.id === id);
+      if (!a) return st;
+      return move({ ...st, adjusts: (st.adjusts ?? []).filter((x) => x.id !== id) }, a.accountId, -a.delta);
+    });
+  },
+  /** Deshace un «mover plata»: cada monto vuelve a su cuenta. */
+  deleteTransfer(id: string) {
+    update((st) => {
+      const t = st.transfers.find((x) => x.id === id);
+      if (!t) return st;
+      return move(move({ ...st, transfers: st.transfers.filter((x) => x.id !== id) }, t.from, t.amount), t.to, -t.received);
+    });
   },
   /** Solo se puede quitar una cuenta sin movimientos y en cero. */
   removeAccount(id: string) {
@@ -644,7 +672,7 @@ export const actions = {
     update((st) => {
       const d = st.debts.find((x) => x.id === id);
       if (!d || amount <= 0) return st;
-      const out = { ...st, debts: st.debts.map((x) => (x.id === id ? { ...x, payments: [...x.payments, { date: day, amount: round2(amount), ...(accountId ? { accountId } : {}) }] } : x)) };
+      const out = { ...st, debts: st.debts.map((x) => (x.id === id ? { ...x, payments: [...x.payments, { date: day, amount: round2(amount), ...(accountId ? { accountId } : {}), time: clockOf() }] } : x)) };
       const acc = accountOf(st, accountId);
       if (!acc) return out;
       const inAcc = convert(amount, d.currency, acc.currency, st.settings.rate);
@@ -670,19 +698,49 @@ export const actions = {
   deleteBill(id: string) {
     update((st) => ({ ...st, bills: st.bills.filter((b) => b.id !== id) }));
   },
-  /** Pagas el vencimiento más antiguo. Si sale de tus cuentas, se descuenta. */
-  payBill(id: string, day: ISODate, amount: number, accountId?: string) {
+  /** Deshace el pago de una deuda (o un cobro): la plata vuelve como estaba. */
+  undoDebtPay(debtId: string, index: number) {
+    update((st) => {
+      const d = st.debts.find((x) => x.id === debtId);
+      const p = d?.payments[index];
+      if (!d || !p) return st;
+      const out = { ...st, debts: st.debts.map((x) => (x.id === debtId ? { ...x, payments: x.payments.filter((_, i) => i !== index) } : x)) };
+      const acc = accountOf(st, p.accountId);
+      if (!acc) return out;
+      const inAcc = convert(p.amount, d.currency, acc.currency, st.settings.rate);
+      return move(out, acc.id, d.dir === 'me-deben' ? -inAcc : inAcc);
+    });
+  },
+
+  /** Pagas el vencimiento más antiguo (o varios meses de una vez). Si sale de tus cuentas, se descuenta. */
+  payBill(id: string, day: ISODate, amount: number, accountId?: string, months = 1) {
     update((st) => {
       const b = st.bills.find((x) => x.id === id);
       if (!b?.nextDue) return st;
-      const nextDue = afterPay(b);
-      const paidRow = { date: day, due: b.nextDue, amount: round2(amount), ...(accountId ? { accountId } : {}) };
+      const n = b.kind === 'mensual' ? Math.max(1, Math.min(24, Math.round(months))) : 1;
+      const nextDue = n > 1 ? addMonths(b.nextDue, n) : afterPay(b);
+      const paidRow = { date: day, due: b.nextDue, amount: round2(amount), ...(accountId ? { accountId } : {}), ...(n > 1 ? { months: n } : {}), time: clockOf() };
       const nb: Bill = { ...b, paid: [...b.paid, paidRow] };
       if (nextDue) nb.nextDue = nextDue;
       else delete nb.nextDue;
       const out = { ...st, bills: st.bills.map((x) => (x.id === id ? nb : x)) };
       const acc = accountOf(st, accountId);
       return acc ? move(out, acc.id, -convert(amount, b.currency, acc.currency, st.settings.rate)) : out;
+    });
+  },
+  /**
+   * Deshace un pago fijo: la plata vuelve a su cuenta y esos meses vuelven a quedar pendientes.
+   */
+  undoBillPay(billId: string, index: number) {
+    update((st) => {
+      const b = st.bills.find((x) => x.id === billId);
+      const p = b?.paid[index];
+      if (!b || !p) return st;
+      const nb: Bill = { ...b, paid: b.paid.filter((_, i) => i !== index) };
+      if (!nb.nextDue || p.due < nb.nextDue) nb.nextDue = p.due;
+      const out = { ...st, bills: st.bills.map((x) => (x.id === billId ? nb : x)) };
+      const acc = accountOf(st, p.accountId);
+      return acc ? move(out, acc.id, convert(p.amount, b.currency, acc.currency, st.settings.rate)) : out;
     });
   },
 
