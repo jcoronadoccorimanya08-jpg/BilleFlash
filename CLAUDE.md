@@ -8,7 +8,8 @@ PWA personal de plata: anotar gastos en segundos, límite diario, cuentas en Bs 
 - Lo personal entra **solo desde el teléfono**: a mano o con un archivo de inicio (`kind: 'config'`) que nunca se sube (`.gitignore` bloquea los nombres habituales).
 - Las tres apps comparten el mismo sitio (mismo origen): todas las llaves de guardado empiezan con `billeflash.` y la base IndexedDB es `billeflash-v1`. Nunca leas ni borres llaves de otra app.
 - Los datos se guardan **solo cifrados** (`src/lib/vault.ts`), con patrón (PBKDF2) y opcionalmente huella (passkey con PRF). Sin cifrar solo tema y apariencia (`billeflash.theme`, `billeflash.look`) y el aviso de instalación.
-- Sin servidores, analítica ni librerías que llamen a internet. «Cobrar por WhatsApp» solo abre un enlace `wa.me` con el texto; la persona elige a quién mandarlo.
+- Sin analítica ni librerías externas: la única conexión a internet es la sincronización cifrada (abajo). «Cobrar por WhatsApp» solo abre un enlace `wa.me` con el texto; la persona elige a quién mandarlo.
+- **Sincronización celular ↔ tablet** (`src/lib/sync.ts`, `src/lib/syncSetup.ts`, pedido de la persona): con un código de sincronización (5 palabras + número, guardado solo dentro de los datos cifrados), el estado se cifra en el dispositivo (PBKDF2 + AES-GCM, llave derivada del código) y se guarda en Supabase (`atusufrroqtbbuffzjrw`) por funciones `put_blob`/`get_blob` que no permiten listar. El servidor solo ve texto ilegible. Un dispositivo recién vinculado siempre baja primero. Única llamada a internet permitida; la llave pública (publishable) puede estar en el código, la secreta nunca.
 - **Widget (app «Rachas»)** (`src/lib/widget.ts`): por postMessage, solo dentro del teléfono, se manda racha, montaña, gastado/límite, disponible, días a la quincena y lo urgente en corto. En **modo discreto** (`settings.discreet`) van sin montos.
 
 ## Reglas del producto

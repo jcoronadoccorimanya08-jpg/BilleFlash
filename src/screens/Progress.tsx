@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { SyncCard } from '../components/SyncCard';
+import { linkSync, sync, unlinkSync } from '../lib/syncSetup';
 import { AccountSelect, AmountField } from '../components/bf';
 import { Icon } from '../components/Icon';
 import { CapitalCurve, CategoryBars, DayBars } from '../components/Charts';
@@ -442,16 +444,8 @@ function Settings({ state, today, hasBio }: { state: AppState; today: ISODate; h
         </div>
       </section>
 
-      <SectionTitle>📲 Celular ↔ tablet</SectionTitle>
-      <section className="card stack">
-        <p className="fine">En el dispositivo donde anotas, toca «Pasar» y elige tu otro dispositivo en Quick Share. En el otro, toca «Recibir», elige el archivo (queda en Descargas) y dibuja tu patrón: queda igual. Recibir reemplaza lo que había en ese dispositivo.</p>
-        <button type="button" className="btn primary" onClick={() => void backup('share')}>
-          📲 Pasar a mi otro dispositivo
-        </button>
-        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
-          📥 Recibir de mi otro dispositivo
-        </button>
-      </section>
+      <SectionTitle>☁️ Celular ↔ tablet</SectionTitle>
+      <SyncCard code={state.settings.syncCode} onSet={linkSync} onOff={unlinkSync} onNow={() => void sync.syncNow()} />
 
       <SectionTitle>Respaldo</SectionTitle>
       <section className="card stack">
