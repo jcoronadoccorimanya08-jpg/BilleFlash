@@ -375,6 +375,14 @@ export function convert(amount: number, from: Currency, to: Currency, rate: numb
   return round2(from === 'PEN' ? amount * rate : amount / rate);
 }
 
+/** El mismo pago, con otra cuenta (o sin cuenta). */
+function withAccount<T extends { accountId?: string }>(q: T, accountId?: string): T {
+  const n = { ...q };
+  if (accountId) n.accountId = accountId;
+  else delete n.accountId;
+  return n;
+}
+
 /** Suma (o resta) a una cuenta. */
 function move(st: AppState, accountId: string | undefined, delta: number): AppState {
   if (!accountId || !delta) return st;
@@ -672,7 +680,8 @@ export const actions = {
     update((st) => {
       const d = st.debts.find((x) => x.id === id);
       if (!d || amount <= 0) return st;
-      const out = { ...st, debts: st.debts.map((x) => (x.id === id ? { ...x, payments: [...x.payments, { date: day, amount: round2(amount), ...(accountId ? { accountId } : {}), time: clockOf() }] } : x)) };
+      const settings = d.dir === 'me-deben' && accountId ? { ...st.settings, lastCollectAccount: accountId } : st.settings;
+      const out = { ...st, settings, debts: st.debts.map((x) => (x.id === id ? { ...x, payments: [...x.payments, { date: day, amount: round2(amount), ...(accountId ? { accountId } : {}), time: clockOf() }] } : x)) };
       const acc = accountOf(st, accountId);
       if (!acc) return out;
       const inAcc = convert(amount, d.currency, acc.currency, st.settings.rate);
@@ -714,6 +723,36 @@ export const actions = {
       return { ...st, bills: [...st.bills, bill], removedBills: (st.removedBills ?? []).filter((x) => x.id !== id) };
     });
   },
+  /** Corrige a qué cuenta entró (o de cuál salió) un cobro o pago de deuda: mueve la plata de una a otra. */
+  moveDebtPay(debtId: string, index: number, accountId: string | undefined) {
+    update((st) => {
+      const d = st.debts.find((x) => x.id === debtId);
+      const p = d?.payments[index];
+      if (!d || !p || (p.accountId ?? '') === (accountId ?? '')) return st;
+      const sign = d.dir === 'me-deben' ? 1 : -1;
+      let out: AppState = { ...st, debts: st.debts.map((x) => (x.id === debtId ? { ...x, payments: x.payments.map((q, i) => (i === index ? withAccount(q, accountId) : q)) } : x)) };
+      const from = accountOf(st, p.accountId);
+      const to = accountOf(st, accountId);
+      if (from) out = move(out, from.id, -sign * convert(p.amount, d.currency, from.currency, st.settings.rate));
+      if (to) out = move(out, to.id, sign * convert(p.amount, d.currency, to.currency, st.settings.rate));
+      return out;
+    });
+  },
+  /** Corrige de qué cuenta salió un pago fijo. */
+  moveBillPay(billId: string, index: number, accountId: string | undefined) {
+    update((st) => {
+      const b = st.bills.find((x) => x.id === billId);
+      const p = b?.paid[index];
+      if (!b || !p || (p.accountId ?? '') === (accountId ?? '')) return st;
+      let out: AppState = { ...st, bills: st.bills.map((x) => (x.id === billId ? { ...x, paid: x.paid.map((q, i) => (i === index ? withAccount(q, accountId) : q)) } : x)) };
+      const from = accountOf(st, p.accountId);
+      const to = accountOf(st, accountId);
+      if (from) out = move(out, from.id, convert(p.amount, b.currency, from.currency, st.settings.rate));
+      if (to) out = move(out, to.id, -convert(p.amount, b.currency, to.currency, st.settings.rate));
+      return out;
+    });
+  },
+
   /** Deshace el pago de una deuda (o un cobro): la plata vuelve como estaba. */
   undoDebtPay(debtId: string, index: number) {
     update((st) => {

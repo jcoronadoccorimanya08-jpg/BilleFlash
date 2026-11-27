@@ -19,7 +19,7 @@ PWA personal de plata: anotar gastos en segundos, límite diario, cuentas en Bs 
 - **Racha de la noche**: sube con «Cerrar mi día». Antes de medianoche vale 100 %; cerrar «ayer» de 00:00 a 03:59, 75 %. Cada gasto olvidado (marcado o agregado después de cerrar) resta 15 %, mínimo 10 %. Sin cerrar a las 4:00: 0 % y corta. Hoy sin cerrar no corta. La montaña dibuja ese %.
 - **Quincena**: al registrarla, el ahorro se aparta solo a la cuenta de ahorro. Límite diario **fijo** = (quincena − ahorro) ÷ días (15). Lo que sobra o falta pasa a la siguiente (`carry`).
 - **Capital** = en mano + me deben − debo, en Bs con el tipo de cambio (variable, lo escribe la persona). Cada cierre guarda una foto (`shots`).
-- **Deudas** en su moneda, nunca se cruzan solas; plan de cuotas opcional (`nextInstallment`).
+- **Deudas** en su moneda, nunca se cruzan solas; plan de cuotas opcional (`nextInstallment`). Al cobrar o pagar, la cuenta se elige con botones (`AccountPicker`: banco por QR, efectivo…); el último cobro recuerda su cuenta (`lastCollectAccount`). En Movimientos se corrige la cuenta de un cobro, pago o gasto (`moveDebtPay`, `moveBillPay`): la plata pasa sola de una cuenta a la otra.
 - **Pagos**: mensuales (con `nextDue`, cuenta meses atrasados) o «cuando llega el recibo». `source: 'depa'` no sale de las cuentas propias. «Quitar» no borra: pasa a «Pagos quitados» (`removedBills`) y se recupera con su historial.
 - **Moneda principal** (`settings.mainCurrency`, sin dato = Bs): límite, capital y gráficas en esa moneda (`toMain`, `money()` usa la principal).
 - **Plata sin fecha fija** (`incomeMode: 'libre'`): límite diario fijo (`dailyLimit`) y cada plata que entra aparta solo su % (`savingPct`) a la alcancía (`kept`).

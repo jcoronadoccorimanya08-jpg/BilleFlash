@@ -97,7 +97,8 @@ export function DebtsScreen({ state, today }: { state: AppState; today: ISODate 
             state={state}
             initial={nextInstallment(pay, today)?.amount ?? debtLeft(pay)}
             currency={pay.currency}
-            accountLabelText={pay.dir === 'me-deben' ? 'A qué cuenta entró' : 'De qué cuenta salió'}
+            accountLabelText={pay.dir === 'me-deben' ? '¿Cómo te pagó? (QR al banco o en efectivo)' : '¿De dónde salió?'}
+            defaultAccount={pay.dir === 'me-deben' ? state.settings.lastCollectAccount : undefined}
             allowNone
             confirm="Registrar"
             onDone={(amount, acc) => {

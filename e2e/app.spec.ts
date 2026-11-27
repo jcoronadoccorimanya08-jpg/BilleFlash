@@ -252,7 +252,7 @@ test('pagar 2 meses de una vez, verlo en Hoy y en Movimientos, y deshacerlo', as
   const sheet = page.getByRole('dialog');
   await sheet.getByRole('radio', { name: '2 meses' }).click();
   await expect(sheet.getByLabel('Monto (Bs)')).toHaveValue('20');
-  await sheet.getByLabel('De dónde salió').selectOption({ label: 'Monedas (Bs) · Bs 50' });
+  await sheet.getByRole('radio', { name: /Monedas/ }).click();
   await sheet.getByRole('button', { name: 'Pagado' }).click();
   await expect(internet).toContainText('Atrasado: 1 mes');
 
@@ -296,4 +296,35 @@ test('un pago quitado se recupera con su historial', async ({ page }) => {
   await expect(page.locator('.bf-bill')).toHaveCount(0);
   await page.getByRole('button', { name: 'Recuperar' }).click();
   await expect(internet).toContainText('Atrasado: 2 meses');
+});
+
+test('cobrar una deuda por QR al banco (o en efectivo), y corregir la cuenta después', async ({ page }) => {
+  await setupFromFile(page);
+  await nav(page, 'Deudas');
+  const ana = page.locator('.bf-debt').filter({ hasText: 'Ana' });
+  await ana.getByRole('button', { name: 'Me pagó' }).click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.getByText('¿Cómo te pagó? (QR al banco o en efectivo)')).toBeVisible();
+  await sheet.getByRole('radio', { name: /Banco Uno/ }).click();
+  await sheet.getByRole('button', { name: 'Registrar' }).click();
+  await nav(page, 'Cuentas');
+  // S/ 20 × 3,5 = Bs 70 al banco (100 → 170); el efectivo no cambia.
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Banco Uno' })).toContainText('Bs 170');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Monedas' })).toContainText('Bs 50');
+
+  // La próxima vez ya viene elegido el banco.
+  await nav(page, 'Deudas');
+  await ana.getByRole('button', { name: 'Me pagó' }).click();
+  await expect(page.getByRole('dialog').getByRole('radio', { name: /Banco Uno/ })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+
+  // Me equivoqué: en realidad fue en efectivo → se corrige en Movimientos.
+  await nav(page, 'Cuentas');
+  await page.getByRole('button', { name: /Movimientos/ }).click();
+  const row = page.locator('.mv-item').filter({ hasText: 'Ana te pagó' });
+  await row.getByRole('button').first().click();
+  await row.getByLabel('¿Entró a otra cuenta?').selectOption({ label: 'Monedas' });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Banco Uno' })).toContainText('Bs 100');
+  await expect(page.locator('.bf-acc').filter({ hasText: 'Monedas' })).toContainText('Bs 120');
 });

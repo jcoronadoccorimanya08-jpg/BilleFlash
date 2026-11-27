@@ -199,6 +199,8 @@ export interface Settings {
   syncCode?: string;
   autoLockMinutes: number;
   lastBackupAt?: string;
+  /** La última cuenta donde entró un cobro de deuda (viene elegida la próxima vez). */
+  lastCollectAccount?: string;
   createdAt: string;
 }
 

@@ -38,6 +38,42 @@ export function AmountField({ value, onChange, label = 'Monto', placeholder = '0
   );
 }
 
+const KIND_ICON: Record<Account['kind'], string> = { banco: '🏦', efectivo: '💵', billetera: '📱', ahorro: '🐷' };
+
+/**
+ * Elegir la cuenta con botones grandes (no un menú escondido): «🏦 BNB (QR)», «💵 Efectivo»… Así no se te
+ * pasa que el cobro entró al banco.
+ */
+export function AccountPicker({ state, value, onChange, label, allowNone, noneLabel }: { state: AppState; value: string; onChange: (id: string) => void; label: string; allowNone?: boolean; noneLabel?: string }) {
+  return (
+    <div className="lbl-field">
+      <span>{label}</span>
+      <div className="acc-pick" role="radiogroup" aria-label={label}>
+        {state.accounts.map((a) => (
+          <button key={a.id} type="button" role="radio" aria-checked={value === a.id} className="acc-chip" onClick={() => onChange(a.id)}>
+            <span aria-hidden="true">{KIND_ICON[a.kind]}</span>
+            <span className="acc-chip-txt">
+              <b>{a.name}</b>
+              <small>
+                {a.kind === 'banco' || a.kind === 'billetera' ? 'QR / transferencia · ' : ''}
+                {money(a.balance, a.currency)}
+              </small>
+            </span>
+          </button>
+        ))}
+        {allowNone && (
+          <button type="button" role="radio" aria-checked={value === ''} className="acc-chip none" onClick={() => onChange('')}>
+            <span aria-hidden="true">🚫</span>
+            <span className="acc-chip-txt">
+              <b>{noneLabel ?? 'No pasó por mis cuentas'}</b>
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Formulario de un pago o cobro: monto + cuenta. */
 export function PayForm({
   state,
@@ -47,6 +83,7 @@ export function PayForm({
   allowNone,
   noneLabel,
   defaultNone,
+  defaultAccount,
   confirm,
   onDone,
 }: {
@@ -58,11 +95,13 @@ export function PayForm({
   noneLabel?: string;
   /** Empieza en «no pasó por mis cuentas» (solo para pagos del depa). */
   defaultNone?: boolean;
+  /** La cuenta que viene elegida (por ejemplo, la que usaste la última vez). */
+  defaultAccount?: string;
   confirm: string;
   onDone: (amount: number, accountId: string | undefined) => void;
 }) {
   const [amount, setAmount] = useState(initial ? String(initial) : '');
-  const [acc, setAcc] = useState(defaultNone ? '' : (state.accounts.find((a) => a.kind === 'efectivo') ?? state.accounts[0])?.id ?? '');
+  const [acc, setAcc] = useState(defaultNone ? '' : state.accounts.some((a) => a.id === defaultAccount) ? defaultAccount! : ((state.accounts.find((a) => a.kind === 'efectivo') ?? state.accounts[0])?.id ?? ''));
   const n = parseAmount(amount);
   return (
     <form
@@ -73,7 +112,7 @@ export function PayForm({
       }}
     >
       <AmountField value={amount} onChange={setAmount} label={`Monto (${CURRENCY_SIGN[currency]})`} autoFocus />
-      <AccountSelect state={state} value={acc} onChange={setAcc} label={accountLabelText} allowNone={allowNone} noneLabel={noneLabel} />
+      <AccountPicker state={state} value={acc} onChange={setAcc} label={accountLabelText} allowNone={allowNone} noneLabel={noneLabel} />
       <button type="submit" className="btn primary" disabled={!n}>
         {confirm}
       </button>

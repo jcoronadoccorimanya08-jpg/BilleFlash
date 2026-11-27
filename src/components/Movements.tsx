@@ -138,6 +138,7 @@ export function Movements({ state, account: preset }: { state: AppState; account
                       ) : (
                         <p className="fine">No pasó por tus cuentas.</p>
                       )}
+                      <FixAccount state={state} m={m} />
                       <button type="button" className="btn sm danger" onClick={() => setConfirm(m)}>
                         ↩️ Deshacer
                       </button>
@@ -165,5 +166,37 @@ export function Movements({ state, account: preset }: { state: AppState; account
         }}
       />
     </div>
+  );
+}
+
+/** «¿Entró a otra cuenta?»: corrige la cuenta de un cobro, un pago o un gasto (la plata se mueve sola). */
+function FixAccount({ state, m }: { state: AppState; m: Movement }) {
+  const u = m.undo;
+  if (u.type !== 'debt' && u.type !== 'bill' && u.type !== 'expense') return null;
+  const current = m.lines[0]?.accountId ?? '';
+  const label = m.kind === 'cobro' ? '¿Entró a otra cuenta?' : '¿Salió de otra cuenta?';
+  return (
+    <label className="lbl-field fix-acc">
+      <span>{label}</span>
+      <select
+        className="field"
+        value={current}
+        onChange={(e) => {
+          const to = e.target.value || undefined;
+          if (u.type === 'debt') actions.moveDebtPay(u.debtId, u.index, to);
+          else if (u.type === 'bill') actions.moveBillPay(u.billId, u.index, to);
+          else if (to) actions.updateExpense(u.id, { accountId: to });
+          const name = state.accounts.find((a) => a.id === to)?.name;
+          toast(name ? `Listo: ahora está en ${name}.` : 'Listo: no pasó por tus cuentas.', 'success');
+        }}
+      >
+        {state.accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+        {u.type !== 'expense' && <option value="">No pasó por mis cuentas</option>}
+      </select>
+    </label>
   );
 }

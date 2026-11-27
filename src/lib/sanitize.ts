@@ -213,6 +213,7 @@ function sanitizeSettings(v: unknown): Settings | null {
     ...(typeof v.syncCode === 'string' && /^[a-z0-9-]{16,120}$/.test(v.syncCode) ? { syncCode: v.syncCode } : {}),
     autoLockMinutes: [0, 1, 5, 15].includes(v.autoLockMinutes as number) ? (v.autoLockMinutes as number) : 1,
     ...(typeof v.lastBackupAt === 'string' ? { lastBackupAt: v.lastBackupAt } : {}),
+    ...(str(v.lastCollectAccount, 40) ? { lastCollectAccount: str(v.lastCollectAccount, 40) } : {}),
     createdAt: typeof v.createdAt === 'string' ? v.createdAt : new Date().toISOString(),
   };
 }
