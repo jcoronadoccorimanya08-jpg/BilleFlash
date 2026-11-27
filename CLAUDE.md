@@ -15,8 +15,8 @@ PWA personal de plata: anotar gastos en segundos, límite diario, cuentas en Bs 
 ## Reglas del producto
 
 - Interfaz en **español de Bolivia**, directo y respetuoso. **Sin culpa**: pasarse del límite es información.
-- **El día cambia a las 4:00** de La Paz (`appDay`): lo anotado de 00:00 a 03:59 cuenta para el día anterior.
-- **Racha de la noche**: sube con «Cerrar mi día». Antes de medianoche vale 100 %; de 00:00 a 03:59, 75 %. Cada gasto olvidado (marcado o agregado después de cerrar) resta 15 %, mínimo 10 %. Sin cerrar a las 4:00: 0 % y corta. Hoy sin cerrar no corta. La montaña dibuja ese %.
+- **El día cambia a las 00:00** de La Paz (`appDay`, pedido de la persona). Si se te pasó, «ayer» todavía se puede cerrar de 00:00 a 03:59 (`graceDay`, vale 75 %).
+- **Racha de la noche**: sube con «Cerrar mi día». Antes de medianoche vale 100 %; cerrar «ayer» de 00:00 a 03:59, 75 %. Cada gasto olvidado (marcado o agregado después de cerrar) resta 15 %, mínimo 10 %. Sin cerrar a las 4:00: 0 % y corta. Hoy sin cerrar no corta. La montaña dibuja ese %.
 - **Quincena**: al registrarla, el ahorro se aparta solo a la cuenta de ahorro. Límite diario **fijo** = (quincena − ahorro) ÷ días (15). Lo que sobra o falta pasa a la siguiente (`carry`).
 - **Capital** = en mano + me deben − debo, en Bs con el tipo de cambio (variable, lo escribe la persona). Cada cierre guarda una foto (`shots`).
 - **Deudas** en su moneda, nunca se cruzan solas; plan de cuotas opcional (`nextInstallment`).

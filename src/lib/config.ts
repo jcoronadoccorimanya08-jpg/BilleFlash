@@ -2,7 +2,7 @@ import type { Account, AccountKind, Currency } from './types';
 
 export const APP_NAME = 'BilleFlash';
 
-/** Cerrar el día a tiempo (antes de medianoche) vale 100 %; de 00:00 a 03:59, 75 %. */
+/** Cerrar el día a tiempo (antes de medianoche) vale 100 %; «ayer» de 00:00 a 03:59, 75 %. */
 export const ON_TIME_PCT = 100;
 export const LATE_PCT = 75;
 /** Cada gasto olvidado resta esto. */

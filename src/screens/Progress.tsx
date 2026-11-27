@@ -202,7 +202,7 @@ export function ProgressScreen({ state, today, now, hasBio }: { state: AppState;
       <section className="card">
         <h2 className="card-title">Tu montaña</h2>
         {data.length ? <Mountain data={data} goal={100} /> : <p className="muted">Empieza cerrando tu primera noche.</p>}
-        <p className="fine">100 %: cerraste antes de medianoche. 75 %: de madrugada. Cada olvido resta 15 %.</p>
+        <p className="fine">100 %: cerraste antes de medianoche. 75 %: lo cerraste pasada la medianoche (hasta las 4:00). Cada olvido resta 15 %.</p>
       </section>
 
       <QuincenaSection state={state} today={today} now={now} />

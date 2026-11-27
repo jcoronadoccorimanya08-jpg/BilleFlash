@@ -22,7 +22,7 @@ export interface Account {
 /** Un gasto del día. */
 export interface Expense {
   id: string;
-  /** Día de la app (cambia a las 4:00). */
+  /** Día de la app (cambia a las 00:00). */
   date: ISODate;
   /** «HH:MM». */
   time: string;

@@ -19,7 +19,7 @@ import {
   randomBytes,
   toB64,
 } from './crypto';
-import { addMonths, appDay, clockOf, type ISODate } from './dates';
+import { addMonths, appDay, clockOf, graceDay, type ISODate } from './dates';
 import { afterPay, accountOf, allocateSaving, round2, shotOf } from './engine';
 import { newId, sanitizeState } from './sanitize';
 import type { Accent, Account, AppState, Bill, Category, Currency, Debt, Expense, Goal, Settings, TextSize } from './types';
@@ -468,7 +468,7 @@ export const actions = {
   /** «Cerrar mi día»: sube la racha y guarda la foto de tu capital. */
   closeDay(day: ISODate, now: Date = new Date()) {
     update((st) => {
-      if (st.days[day]?.closedAt || day !== appDay(now)) return st;
+      if (st.days[day]?.closedAt || (day !== appDay(now) && day !== graceDay(now))) return st;
       const next = { ...st, days: { ...st.days, [day]: { closedAt: now.toISOString() } } };
       const shot = shotOf(next, day, clockOf(now));
       return { ...next, shots: [...st.shots, shot] };

@@ -3,7 +3,7 @@
  * Todo lo que se compara entre monedas se pasa a Bs con el tipo de cambio que escribiste.
  */
 import { FORGOT_PENALTY, LATE_PCT, MIN_CLOSED_PCT, MOUNTAIN_DAYS, ON_TIME_PCT, SOON_DAYS } from './config';
-import { addDays, addMonths, appDay, diffDays, maxDate, rangeDates, todayISO, type ISODate } from './dates';
+import { addDays, addMonths, appDay, diffDays, graceDay, maxDate, rangeDates, todayISO, type ISODate } from './dates';
 import type { Account, AppState, Bill, CapitalShot, Category, Currency, Debt, Expense, Goal, Income } from './types';
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -50,8 +50,9 @@ export function forgotCount(state: AppState, day: ISODate): number {
 }
 
 /**
- * Cómo te fue con el hábito de revisar: cerrar antes de medianoche vale 100 %; de 00:00 a 03:59, 75 %.
- * Cada gasto olvidado resta 15 % (mínimo 10 %). Si a las 4:00 no cerraste, ese día vale 0 % y corta la racha.
+ * Cómo te fue con el hábito de revisar. El día cambia a las 00:00. Cerrar antes de medianoche vale 100 %; si se te
+ * pasó, todavía puedes cerrar «ayer» de 00:00 a 03:59 y vale 75 %. Cada gasto olvidado resta 15 % (mínimo 10 %).
+ * Si a las 4:00 no cerraste, ese día vale 0 % y corta la racha.
  */
 export function dayStatus(state: AppState, day: ISODate, now: Date): DayStatus {
   if (day < state.settings.startDate) return { kind: 'before' };
@@ -62,23 +63,24 @@ export function dayStatus(state: AppState, day: ISODate, now: Date): DayStatus {
     const pct = Math.max(MIN_CLOSED_PCT, (late ? LATE_PCT : ON_TIME_PCT) - FORGOT_PENALTY * forgot);
     return { kind: 'closed', pct, late, forgot };
   }
-  return appDay(now) > day ? { kind: 'missed' } : { kind: 'open', forgot };
+  return graceDay(now) > day ? { kind: 'missed' } : { kind: 'open', forgot };
 }
 
 export function dayPct(st: DayStatus): number {
   return st.kind === 'closed' ? st.pct : 0;
 }
 
-/** ¿Todavía puedes cerrar este día? Solo el día de la app (hasta las 4:00 del siguiente). */
+/** ¿Todavía puedes cerrar este día? Hoy, y «ayer» hasta las 4:00 (vale 75 %). */
 export function canClose(state: AppState, day: ISODate, now: Date): boolean {
-  return day === appDay(now) && day >= state.settings.startDate && !state.days[day]?.closedAt;
+  return (day === appDay(now) || day === graceDay(now)) && day >= state.settings.startDate && !state.days[day]?.closedAt;
 }
 
 /** Noches seguidas cerradas. Hoy, si todavía no cierras, no corta. */
 export function streak(state: AppState, now: Date): number {
   let d = appDay(now);
   let n = 0;
-  if (dayStatus(state, d, now).kind === 'open') d = addDays(d, -1);
+  // Hoy (y «ayer» hasta las 4:00) sin cerrar todavía no cortan.
+  for (let i = 0; i < 2 && dayStatus(state, d, now).kind === 'open'; i++) d = addDays(d, -1);
   while (d >= state.settings.startDate && dayStatus(state, d, now).kind === 'closed') {
     n++;
     d = addDays(d, -1);

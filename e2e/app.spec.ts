@@ -131,15 +131,15 @@ test('archivo de inicio: capital, quincena con ahorro, cobros y pagos atrasados'
   await expect(internet).toContainText('Atrasado: 2 meses');
 });
 
-test('día cerrado de madrugada vale 75 % y la montaña lo muestra', async ({ page }) => {
+test('a las 00:00 ya es otro día; «ayer» se cierra hasta las 4:00 y vale 75 %', async ({ page }) => {
   await setupFromFile(page);
   await page.clock.setFixedTime(new Date('2026-11-24T02:30:00-04:00'));
   await page.reload();
   await draw(page, PATTERN);
-  await expect(page.getByText('lunes 23 de noviembre')).toBeVisible();
-  await page.getByRole('button', { name: 'Cerrar mi día' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar mi día' }).click();
-  await expect(page.getByText('Día cerrado · 75 %')).toBeVisible();
+  await expect(page.getByText('martes 24 de noviembre')).toBeVisible();
+  await expect(page.getByText('Se te pasó cerrar ayer')).toBeVisible();
+  await page.getByRole('button', { name: 'Cerrar ayer' }).click();
+  await expect(page.getByText('Se te pasó cerrar ayer')).toHaveCount(0);
   await nav(page, 'Avance');
   await expect(page.locator('.tile').filter({ hasText: 'Noches seguidas' })).toContainText('1');
   // Tabla como el Excel: N° 1 al empezar y N° 2 al cerrar; «Anotar mi capital ahora» agrega otra.

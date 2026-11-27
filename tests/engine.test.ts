@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appDay, addMonths } from '../src/lib/dates';
-import { piggyMoves, piggyStats, alerts, allocateSaving, antojosLeft, billStatus, capital, collectMessage, dailyBars, dayStatus, favorites, goalPerQuincena, guessCategory, nextInstallment, parseAmount, quincenaStatus, quincenaSummaries, spentOn, streak, unassignedSaving } from '../src/lib/engine';
+import { canClose, piggyMoves, piggyStats, alerts, allocateSaving, antojosLeft, billStatus, capital, collectMessage, dailyBars, dayStatus, favorites, goalPerQuincena, guessCategory, nextInstallment, parseAmount, quincenaStatus, quincenaSummaries, spentOn, streak, unassignedSaving } from '../src/lib/engine';
 import type { AppState, Bill, Debt, Expense, Goal } from '../src/lib/types';
 import { buildWidgetFrame } from '../src/lib/widget';
 import { buildSummary, openTeamFile, peekTeamFile, sealForTeam } from '../src/lib/coach';
@@ -36,10 +36,21 @@ function base(): AppState {
 const exp = (date: string, amount: number, extra: Partial<Expense> = {}): Expense => ({ id: `${date}-${amount}-${Math.random()}`, date, time: '12:00', desc: 'x', amount, accountId: 'monedas', ...extra });
 
 describe('día de la app', () => {
-  it('cambia a las 4:00 de La Paz', () => {
+  it('cambia a las 00:00 de La Paz', () => {
     expect(appDay(lp('2026-11-23', '23:50'))).toBe('2026-11-23');
-    expect(appDay(lp('2026-11-24', '02:45'))).toBe('2026-11-23');
-    expect(appDay(lp('2026-11-24', '04:00'))).toBe('2026-11-24');
+    expect(appDay(lp('2026-11-24', '00:00'))).toBe('2026-11-24');
+    expect(appDay(lp('2026-11-24', '02:45'))).toBe('2026-11-24');
+  });
+  it('si se te pasó, «ayer» se puede cerrar hasta las 4:00 (75 %) y la racha no se corta antes', () => {
+    const s = base();
+    s.days['2026-11-22'] = { closedAt: lp('2026-11-22', '22:00').toISOString() };
+    const at = lp('2026-11-24', '01:30');
+    expect(canClose(s, '2026-11-23', at)).toBe(true);
+    expect(dayStatus(s, '2026-11-23', at).kind).toBe('open');
+    expect(streak(s, at)).toBe(1);
+    expect(canClose(s, '2026-11-23', lp('2026-11-24', '04:00'))).toBe(false);
+    expect(dayStatus(s, '2026-11-23', lp('2026-11-24', '04:00')).kind).toBe('missed');
+    expect(streak(s, lp('2026-11-24', '04:00'))).toBe(0);
   });
   it('suma meses sin pasarse del último día', () => {
     expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');

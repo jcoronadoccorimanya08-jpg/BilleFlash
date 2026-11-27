@@ -5,7 +5,7 @@ import { Icon } from '../components/Icon';
 import { PiggyCard } from '../components/Piggy';
 import { ConfirmDialog, ScreenHeader, Sheet } from '../components/ui';
 import { CLOSE_PHRASES, CURRENCY_SIGN } from '../lib/config';
-import { clockOf, diffDays, formatLong, localDateOf, type ISODate } from '../lib/dates';
+import { addDays, clockOf, diffDays, formatLong, localDateOf, type ISODate } from '../lib/dates';
 import { accountOf, alerts, antojosLeft, mainOf, canClose, CATEGORIES, categoryInfo, categoryOf, dayStatus, favorites, guessCategory, money, parseAmount, quincenaStatus, spentOn, streak } from '../lib/engine';
 import { fixedOn, KIND_ICON } from '../lib/movements';
 import { haptic, toast } from '../lib/feedback';
@@ -55,6 +55,14 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
     setDesc('');
     setAmount('');
     setForgot(false);
+  };
+
+  const yesterday = addDays(today, -1);
+  const canCloseYesterday = canClose(state, yesterday, now);
+  const closeYesterday = () => {
+    actions.closeDay(yesterday, now);
+    haptic([20, 40, 20]);
+    toast('Ayer quedó cerrado (75 %). Tu racha sigue.', 'reward');
   };
 
   const close = () => {
@@ -221,19 +229,32 @@ export function TodayScreen({ state, today, now, onBackup }: { state: AppState; 
         </button>
       </div>
 
+      {canCloseYesterday && (
+        <section className="card bf-close bf-yesterday" role="alert">
+          <p>
+            <b>🌙 Se te pasó cerrar ayer</b>
+            <br />
+            <span className="muted">Ya es otro día (cambia a las 00:00), pero hasta las 4:00 todavía puedes cerrar ayer: vale 75 % y tu racha sigue.</span>
+          </p>
+          <button type="button" className="btn primary bf-close-btn" onClick={closeYesterday}>
+            <Icon name="check" /> Cerrar ayer
+          </button>
+        </section>
+      )}
+
       <section className="card bf-close">
         {st.kind === 'closed' ? (
           <p>
             <b>Día cerrado · {st.pct} %</b>
             <br />
             <span className="muted">
-              {st.late ? 'Lo cerraste de madrugada (75 %)' : 'A tiempo (100 %)'}
+              {st.late ? 'Lo cerraste pasada la medianoche (75 %)' : 'A tiempo (100 %)'}
               {st.forgot ? ` · ${st.forgot} olvidado${st.forgot === 1 ? '' : 's'} (−${st.forgot * 15} %)` : ''}.
             </span>
           </p>
         ) : (
           <>
-            <p className="muted">Revisa que esté todo y cierra tu noche. Antes de medianoche vale 100 %; de 00:00 a 03:59, 75 %.</p>
+            <p className="muted">Revisa que esté todo y cierra tu noche antes de las 00:00 (vale 100 %). Si se te pasa, hasta las 4:00 puedes cerrar «ayer» (75 %).</p>
             <button type="button" className="btn primary bf-close-btn" disabled={!canClose(state, today, now)} onClick={() => setAskClose(true)}>
               <Icon name="check" /> Cerrar mi día
             </button>
